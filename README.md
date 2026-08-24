@@ -2,8 +2,7 @@
 
 Finds the **minimum generator power-setpoint adjustment (ΔPm)** needed to restore
 frequency stability after a fault on the IEEE 9-bus test system, with results
-**directly verified against the system's own ground-truth DAE simulator** — not
-just predicted by an approximation of it.
+**directly verified against the system's own ground-truth DAE simulator** 
 
 ## Objective
 
