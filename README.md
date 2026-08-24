@@ -7,17 +7,12 @@ frequency stability after a fault on the IEEE 9-bus test system, with results
 ## Objective
 
 Given a fault (generator trip, load fault, or transmission line fault), find the
-smallest possible ΔPm — a corrective adjustment to each generator's governor
-setpoint — such that:
+smallest possible ΔPm, a corrective adjustment to each generator's governor
+setpoint such that:
 
 ```
 max|ω_i − 1| < 0.005 pu   for all generators i, in the window (t_clear, t_clear + 2s)
 ```
-
-ΔPm must be a genuine learnable parameter, optimized via gradient descent /
-automatic differentiation — not grid search or trial and error — and results
-must be verified to actually work on the ground-truth simulator, not merely
-predicted to work by an approximation of it.
 
 ## Two pipelines
 
@@ -31,8 +26,8 @@ This repo contains two generations of the method:
 | Speed | Fast (deployable in real time) | Slower (used for verification / offline analysis) |
 
 **Why both exist:** the approximate pipeline is fast enough for real-time use,
-but a verification exercise found it could be meaningfully wrong — up to ~190%
-error in some cases — specifically for corrections that land close to the
+but a verification exercise found it could be meaningfully wrong by up to ~190%
+error in some cases specifically for corrections that land close to the
 stability threshold. Rather than trusting the approximate pipeline blindly, the
 ground-truth pipeline checks (or in some cases fully replaces) its answers
 against the real solver before anything is reported as a success.
@@ -54,15 +49,9 @@ transmission-line scenarios = 520 total), verified directly against the real DAE
 | **Total** | **467/520 (89.8%)** |
 
 Failures concentrate almost entirely on **Generator 1** (the largest generator
-in the system — 1.63 pu vs. 0.72 and 0.85 pu for the other two) at high
-severity, and on the most severe/longest-duration load and line faults — a
-physically consistent pattern, not a modeling artifact.
+in the system rated as 1.63 pu (gen 1) vs. 0.72 (gen 0) and 0.85 pu (gen 2) for the other two) at high
+severity, and on the most severe/longest-duration
 
-**Transformer faults were investigated separately and found not viable** —
-2 of the system's 3 generator transformers are unstable at every tested
-clearing time (zero usable training examples), and the third has only one
-physical location's worth of data. This is a genuine data-scarcity limitation
-of the 9-bus system, not a fixable bug — see the Methodology section below.
 
 ## Repository structure
 
@@ -130,7 +119,7 @@ swing equation plus a first-order droop governor (3 differential states per
 generator — δ, ω, Pm), coupled to the network through the stator algebraic
 equations and the network admittance matrix (Y-bus).
 
-Three fault types, all sharing a common structure — applied at `t_fault = 0.2s`,
+Three fault types, all sharing a common structure: occuring at `t_fault = 0.2s`,
 held until `t_clear`, then **reverting to the original system** (confirmed both
 by direct inspection of the DAE solver's code and empirically: post-fault
 frequency settles back to almost exactly 1.0 pu, the signature of the original
