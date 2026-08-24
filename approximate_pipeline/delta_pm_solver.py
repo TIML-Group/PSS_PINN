@@ -1,22 +1,12 @@
 """
 delta_pm_solver.py
-====================
 ONE FILE that does everything: loads your trained gen-trip PINN, builds a
 faithful differentiable copy of your DAE's physics, and runs gradient
 descent to find the minimum corrective ΔPm that restores post-fault
-stability -- as specified by Dr. Wang (ΔPm is a torch.nn.Parameter,
-optimized directly via autograd, not a grid search).
+stability
 
 WHAT THIS REPLACES
--------------------
-Earlier versions of this pipeline were split across delta_pm_optimizer.py
-and delta_pm_optimizer_v2.py, and used an approximate reduced-network model
-(Option 1) that turned out to be unreliable. This file implements the
-faithful version (Option 2) -- the real Pe = Ed_prime*Id + Eq_prime*Iq,
-solved from the actual network state at every timestep -- verified to
-match your original cross_validation_datagen_governor.py trajectory to
-5 decimal places over a full 2-second run.
-
+(shunt admittance)
 THE KEY BUG THAT WAS FIXED HERE (worth knowing if you extend this file):
 Your solver converts constant-power loads into shunt admittances added to
 the network matrix's diagonal (Y[k,k] += conj(S_load)/|V_lf|^2), computed
@@ -28,7 +18,6 @@ power-flow solve (see solve_prefault_voltages) and applies the shunt
 correction (see build_corrected_Y_adm) before doing anything else.
 
 PIPELINE
---------
 1. Load the frozen PINN (best_model_gen.pt) -- gives the pre-clearing
    trajectory and the handoff state at t_clear.
 2. Solve the true pre-fault network voltages (V_lf) via Newton power flow,
@@ -67,10 +56,7 @@ GOVERNOR_R = 0.05
 GOVERNOR_TG = 0.2
 STABILITY_THRESHOLD = 0.005
 
-
-# ════════════════════════════════════════════════════════════════════════
 # PART 1 -- PINN loading and querying
-# ════════════════════════════════════════════════════════════════════════
 class DNN(nn.Module):
     """Matches the net.0/2/4/6/8/10 Linear+Tanh pattern in the checkpoint."""
     def __init__(self, layer_sizes):
@@ -120,9 +106,8 @@ def query_pinn(model, ckpt, t, alpha, fault_loc, t_clear, device='cpu'):
     return dict(zip(names, y_raw.tolist()))
 
 
-# ════════════════════════════════════════════════════════════════════════
+
 # PART 2 -- system data loading
-# ════════════════════════════════════════════════════════════════════════
 def load_system_json(path):
     with open(path) as f:
         p = json.load(f)
@@ -141,9 +126,8 @@ def load_system_json(path):
             'H': H, 'D': D, 'N_bus': N_bus, 'pl_ini': pl_ini, 'ql_ini': ql_ini, 'params': p}
 
 
-# ════════════════════════════════════════════════════════════════════════
+
 # PART 3 -- pre-fault voltage solve (V_lf) and the load-shunt Y_adm fix
-# ════════════════════════════════════════════════════════════════════════
 def derive_gen_bus_voltages(delta, Id, Iq, Eq_prime, Ed_prime, Xd_prime):
     """
     Terminal voltage at each generator bus, derived directly from the
@@ -228,9 +212,8 @@ def build_corrected_Y_adm(Y_adm_raw, pl_ini, ql_ini, V_lf):
     return Y_adm
 
 
-# ════════════════════════════════════════════════════════════════════════
+
 # PART 4 -- the faithful DAE residual (governor + swing + stator + KCL)
-# ════════════════════════════════════════════════════════════════════════
 class FaithfulResidual:
     """Reproduces update_function_pure_physics() from your DAE, with ΔPm
     threaded into the governor's Pm_ref equation."""
@@ -422,9 +405,8 @@ def stability_loss(traj, res_fn, delta_pm, threshold=STABILITY_THRESHOLD, lam=1e
     return is_violating * (big_offset + violation) + (1 - is_violating) * penalty
 
 
-# ════════════════════════════════════════════════════════════════════════
+
 # PART 5 -- end-to-end scenario setup + optimizer
-# ════════════════════════════════════════════════════════════════════════
 def remove_line_admittance(Y_adm, fault_loc):
     """
     For LINE FAULTS ONLY: permanently removes a transmission line's/
@@ -700,10 +682,7 @@ def find_minimum_delta_pm_timevarying(res_fn, x0, Pm0_setpoint, correction_gens,
         'best_max_dev': best_max_dev, 'best_iter': best_iter, 'history': history,
     }
 
-
-# ════════════════════════════════════════════════════════════════════════
 # MAIN -- edit this block to run a scenario
-# ════════════════════════════════════════════════════════════════════════
 if __name__ == "__main__":
     # ---- CONFIG ----
     CHECKPOINT_PATH = 'best_model_gen.pt'
