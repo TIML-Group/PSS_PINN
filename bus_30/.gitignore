@@ -1,0 +1,9 @@
+slprj
+data_mm
+pinn_dataset*
+delta_p_labels*
+case30_X*
+case30_delta_p_labels*
+case30_dataset*
+data30_mm
+__pycache__

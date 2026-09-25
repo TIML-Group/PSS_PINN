@@ -1,0 +1,50 @@
+{
+ "head": 0.9216867469879518,
+ "oracle_objective": 0.891566265060241,
+ "feasible": 0.9397590361445783,
+ "n_need": 166,
+ "n_instants": 512,
+ "norm_head": 0.5996276140213013,
+ "norm_oracle": 0.5167104601860046,
+ "norm_feasible": 0.7279411554336548,
+ "by_group": {
+  "dp_status 1  (correctable)": {
+   "n": 150,
+   "head": 0.9733333333333334,
+   "oracle": 0.9533333333333334,
+   "feasible": 0.9866666666666667
+  },
+  "dp_status 3  (not correctable)": {
+   "n": 16,
+   "head": 0.4375,
+   "oracle": 0.3125,
+   "feasible": 0.5
+  },
+  "dp_status 0/2 (label says fine)": {
+   "n": 0,
+   "head": NaN,
+   "oracle": NaN,
+   "feasible": NaN
+  },
+  "type gen": {
+   "n": 72,
+   "head": 0.8888888888888888,
+   "oracle": 0.8333333333333334,
+   "feasible": 0.8888888888888888
+  },
+  "type load": {
+   "n": 93,
+   "head": 0.956989247311828,
+   "oracle": 0.946236559139785,
+   "feasible": 0.978494623655914
+  },
+  "type line": {
+   "n": 1,
+   "head": 0.0,
+   "oracle": 0.0,
+   "feasible": 1.0
+  }
+ },
+ "w_dp_norm": 1.0,
+ "epoch": 45
+}
