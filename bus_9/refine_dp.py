@@ -48,7 +48,7 @@ Every epoch's (rescue, ||dP||) pair is written to refine_pareto.json -- that
 trace is the effort/reliability Pareto front.
 """
 
-import argparse, json, os, sys, time
+import argparse, copy, json, os, sys, time
 
 import numpy as np
 import torch
@@ -80,6 +80,11 @@ ap.add_argument('--lam_min', type=float, default=0.1)
 ap.add_argument('--lam_max', type=float, default=1e4)
 # stopping
 ap.add_argument('--patience', type=int, default=30)
+ap.add_argument('--warmup', type=int, default=40,
+                help='Epochs before patience starts counting. lambda starts at '
+                     '--lam0 and decays while the rescue floor is met; without '
+                     'a warm-up the run can stop before the ||dP|| term takes '
+                     'over and report no improvement.')
 ap.add_argument('--min_delta', type=float, default=1e-4,
                 help='||dP|| reduction (pu) that counts as an improvement.')
 ap.add_argument('--val_instants', type=int, default=4096)
@@ -247,15 +252,25 @@ S = IEEE9(args.base, args.sys, dtype=torch.float32, device=device, lines=lines)
 enc = FaultEncoder(ck['n_feat'], w_max_steps=W_STEPS, dt_window=A['dt_window'],
                    lstm_layers=A.get('lstm_layers', 10),
                    init_window=A['init_window'] / A['w_max'],
-                   max_window=A['w_max'], beta0=A['beta0'])
+                   max_window=A['w_max'], beta0=A['beta0'],
+                   encoder=A.get('encoder', 'lstm'),
+                   mlp_proj=A.get('mlp_proj'))
 model = RolloutController(S, enc, horizon=A['horizon'], dt_roll=A['dt_roll'],
                           omega_limit=OMEGA_LIMIT, margin=A.get('margin', 1e-4),
                           dp_head=A.get('dp_head', 'linear'),
                           dp_hidden=A.get('dp_hidden', 128),
                           dp_fc_layers=A.get('dp_fc_layers', 2),
-                          n_refine=A.get('n_refine', 3)).to(device)
+                          n_refine=A.get('n_refine', 3),
+                          dp_cell=A.get('dp_cell', 'lstm')).to(device)
 model.load_state_dict(ck['model'])
-enc.beta.fill_(A['beta_min'])          # keep the trained mask sharpness
+# beta is already restored by load_state_dict above. Overwriting it with
+# A['beta_min'] here changed the mask sharpness the encoder was trained with,
+# which perturbed identification (alpha RMSE, decision accuracy, TPR) even
+# though only the dP head is refined. refine_dp30.py keeps the stored value.
+
+# Keep the pre-refinement weights so the final report can measure the baseline
+# on the SAME split as the refined result (see the report block at the end).
+_orig_state = copy.deepcopy(model.state_dict())
 
 # freeze everything but the dP head, so the identification results of the
 # loaded checkpoint are preserved exactly
@@ -323,7 +338,11 @@ print(f"\nBaseline (validation): rescue {base['rescue']:.4f} on {base['n_need']}
 print(f"Constraint: hold rescue >= {floor:.4f}; minimise ||dP|| under it.\n")
 
 lam = args.lam0
-best_norm = float('inf'); best_epoch = 0; since = 0
+# Start from the BASELINE norm, not infinity: with inf the first feasible epoch
+# is saved unconditionally, even when it costs MORE than the model we started
+# from, and the run then reports "success" at >100% of baseline. Only a
+# genuinely cheaper solution should replace the starting point. (refine_dp30.py)
+best_norm = base['norm']; best_epoch = 0; since = 0
 epoch_units = np.repeat(idx_tr, args.instants_per_scenario)
 n_batches = max(1, int(np.ceil(len(epoch_units) / args.batch_size)))
 rng_b = np.random.default_rng(args.seed + 1)
@@ -387,12 +406,17 @@ for epoch in range(1, args.epochs + 1):
                     'refined_from': args.ckpt, 'refine_args': vars(args),
                     'val': v, 'rescue_floor': floor, 'lam': lam},
                    os.path.join(out_dir, 'best.pt'))
-    else:
+    elif epoch > args.warmup:
+        # Patience only counts after the warm-up. lambda starts high to hold the
+        # rescue constraint and decays from there; counting patience while it is
+        # still large stops the run before the ||dP|| term can take over.
         since += 1
 
     if epoch % args.print_every == 0:
         flag = '  <-- best' if improved else (
-            '  INFEASIBLE' if not feasible else f'  ({since}/{args.patience})')
+            '  INFEASIBLE' if not feasible else
+            f'  (warm-up {epoch}/{args.warmup})' if epoch <= args.warmup
+            else f'  ({since}/{args.patience})')
         prog.note(f"  ep {epoch:4d}  rescue={v['rescue']:.4f}  "
                   f"||dP||={v['norm']:.4f}pu "
                   f"({100*v['norm']/base['norm']:.1f}% of baseline)  "
@@ -410,19 +434,28 @@ print(f"{'='*68}")
 if best_epoch:
     bk = torch.load(os.path.join(out_dir, 'best.pt'), map_location=device,
                     weights_only=False)
+    # Baseline on the TEST split, from the pre-refinement weights. The floor is
+    # still set on validation (above) to keep test unseen during the search,
+    # but the before/after report must compare like with like: quoting a
+    # validation baseline against a test result mixes two different splits.
+    model.load_state_dict(_orig_state)
+    base_te = evaluate(idx_te)
     model.load_state_dict(bk['model'])
     te = evaluate(idx_te)
-    red = 100 * (1 - te['norm'] / base['norm'])
-    print(f"  ||dP||       {base['norm']:.4f} -> {te['norm']:.4f} pu   "
+    red = 100 * (1 - te['norm'] / base_te['norm'])
+    print(f"  (baseline and refined both measured on the TEST split; the "
+          f"rescue floor was set on validation)")
+    print(f"  ||dP||       {base_te['norm']:.4f} -> {te['norm']:.4f} pu   "
           f"({red:.1f}% {'reduction' if red >= 0 else 'INCREASE'})")
-    print(f"  rescue       {base['rescue']:.4f} -> {te['rescue']:.4f}   "
-          f"(floor {floor:.4f}, test split)")
-    print(f"  overall ok   {base['ok']:.4f} -> {te['ok']:.4f}")
+    print(f"  rescue       {base_te['rescue']:.4f} -> {te['rescue']:.4f}   "
+          f"(floor {floor:.4f} set on val = {base['rescue']:.4f} - "
+          f"{args.floor_tol:g})")
+    print(f"  overall ok   {base_te['ok']:.4f} -> {te['ok']:.4f}")
     print(f"  by fault age " + "  ".join(
         f"{lo*1000:.0f}-{(hi*1000 if hi < 1e8 else 9999):.0f}ms:{r:.2f}(n={n})"
         for (lo, hi), (n, r) in zip(AGE_BINS, te['by_age'])))
-    json.dump({'baseline_val': base, 'test': te, 'floor': floor,
-               'best_epoch': best_epoch},
+    json.dump({'baseline_val': base, 'baseline_test': base_te, 'test': te,
+               'floor': floor, 'best_epoch': best_epoch},
               open(os.path.join(out_dir, 'refine_results.json'), 'w'), indent=1)
     print(f"\n  -> {out_dir}/best.pt, refine_results.json, refine_pareto.json")
 else:

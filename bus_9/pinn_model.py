@@ -113,23 +113,59 @@ class ResidualLSTMStack(nn.Module):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+def matched_mlp_proj(n_feat, hidden, mlp_layers, lstm_layers, w_steps):
+    """Per-step projection width that gives the MLP encoder the same number of
+    parameters as the LSTM encoder (projection + LSTM stack + LayerNorm +
+    pooling + trunk), so a difference in results cannot be put down to
+    capacity."""
+    lstm_enc = (n_feat * hidden
+                + lstm_layers * (4 * hidden * (hidden + hidden) + 8 * hidden
+                                 + 2 * hidden)
+                + w_steps
+                + hidden * hidden + hidden + (mlp_layers - 1) * (hidden * hidden + hidden))
+    # mlp encoder: n_feat*P + (W*P*hidden + hidden) + (mlp_layers-1)*(h^2+h)
+    rest = hidden + (mlp_layers - 1) * (hidden * hidden + hidden)
+    P = (lstm_enc - rest) / (n_feat + w_steps * hidden)
+    return max(1, int(round(P)))
+
+
 class FaultEncoder(nn.Module):
     """Window of measurements -> (hypothesis, alpha, x0 correction, dP)."""
 
     def __init__(self, n_feat, hidden=128, mlp_layers=4, lstm_layers=10,
                  w_max_steps=64, dt_window=0.005,
-                 init_window=0.15, max_window=0.30, beta0=0.04):
+                 init_window=0.15, max_window=0.30, beta0=0.04,
+                 encoder='lstm', mlp_proj=None):
         super().__init__()
         self.hidden = hidden
         self.w_max_steps = w_max_steps
         self.dt_window = dt_window
         self.max_window = float(max_window)
+        if encoder not in ('lstm', 'mlp'):
+            raise ValueError(f"encoder must be 'lstm' or 'mlp', got {encoder!r}")
+        self.encoder = encoder
 
-        # bias-free so masked timesteps contribute exactly zero
-        self.proj    = nn.Linear(n_feat, hidden, bias=False)
+        if encoder == 'lstm':
+            # bias-free so masked timesteps contribute exactly zero
+            self.proj  = nn.Linear(n_feat, hidden, bias=False)
+            self.lstm  = ResidualLSTMStack(hidden, lstm_layers)
+            self.trunk = MLPBlock(hidden, hidden, mlp_layers)
+        else:
+            # ABLATION: no recurrence. Each timestep is projected by the SAME
+            # bias-free layer (n_feat -> mlp_proj, masked steps stay exact
+            # zeros), the window is flattened, and an MLP of the same depth
+            # and width as the LSTM model's trunk reads it in one pass. No
+            # pooling: every timestep position has its own weights.
+            # mlp_proj=None picks the width that matches the LSTM encoder's
+            # parameter count (see matched_mlp_proj).
+            if mlp_proj is None:
+                mlp_proj = matched_mlp_proj(n_feat, hidden, mlp_layers,
+                                            lstm_layers, w_max_steps)
+            self.mlp_proj = mlp_proj
+            self.proj  = nn.Linear(n_feat, mlp_proj, bias=False)
+            self.lstm  = None
+            self.trunk = MLPBlock(w_max_steps * mlp_proj, hidden, mlp_layers)
         nn.init.xavier_normal_(self.proj.weight)
-        self.lstm    = ResidualLSTMStack(hidden, lstm_layers)
-        self.trunk   = MLPBlock(hidden, hidden, mlp_layers)
 
         self.head_hyp   = nn.Linear(hidden, N_CLASS)
         self.head_alpha = nn.Linear(hidden, 1)
@@ -146,7 +182,8 @@ class FaultEncoder(nn.Module):
         # age of each timestep relative to the window end (newest = 0)
         age = torch.arange(w_max_steps - 1, -1, -1).float() * dt_window
         self.register_buffer('age', age)
-        self.pool_logits = nn.Parameter(torch.linspace(-1.5, 1.5, w_max_steps))
+        if encoder == 'lstm':
+            self.pool_logits = nn.Parameter(torch.linspace(-1.5, 1.5, w_max_steps))
 
     def window_len(self):
         return self.max_window * torch.sigmoid(self.raw_L)
@@ -159,9 +196,12 @@ class FaultEncoder(nn.Module):
         B, W, F = win.shape
         m = self.mask().view(1, W, 1)
         emb = self.proj(win * m)            # bias-free: masked steps -> exact 0
-        h = self.lstm(emb)
-        w = torch.softmax(self.pool_logits + torch.log(self.mask() + 1e-8), 0)
-        z = self.trunk((h * w.view(1, W, 1)).sum(1))
+        if self.encoder == 'lstm':
+            h = self.lstm(emb)
+            w = torch.softmax(self.pool_logits + torch.log(self.mask() + 1e-8), 0)
+            z = self.trunk((h * w.view(1, W, 1)).sum(1))
+        else:
+            z = self.trunk(emb.reshape(B, -1))
         return {
             'z': z,
             'hyp_logits': self.head_hyp(z),
@@ -179,7 +219,8 @@ class RolloutController(nn.Module):
                  horizon=1.5, dt_roll=0.01, grace=0.2,
                  omega_limit=0.005, margin=1e-4, dp_max=1.0,
                  alpha_lo=0.10, alpha_hi=1.00,
-                 dp_head='linear', dp_hidden=128, dp_fc_layers=2, n_refine=3):
+                 dp_head='linear', dp_hidden=128, dp_fc_layers=2, n_refine=3,
+                 dp_cell='lstm'):
         super().__init__()
         self.S = sys
         self.enc = encoder
@@ -193,7 +234,15 @@ class RolloutController(nn.Module):
         self.n_refine = n_refine
         if dp_head == 'cascade':
             ctx_dim = encoder.hidden + N_CLASS + 1 + 9
-            self.dp_cell = nn.LSTMCell(ctx_dim + 3 + self.N_EXC, dp_hidden)
+            if dp_cell not in ('lstm', 'mlp'):
+                raise ValueError(f"dp_cell must be 'lstm' or 'mlp', got {dp_cell!r}")
+            self.dp_cell_type = dp_cell
+            if dp_cell == 'lstm':
+                self.dp_cell = nn.LSTMCell(ctx_dim + 3 + self.N_EXC, dp_hidden)
+            else:
+                # ABLATION: memoryless refinement, nothing carried between rounds
+                self.dp_cell = nn.Sequential(
+                    nn.Linear(ctx_dim + 3 + self.N_EXC, dp_hidden), nn.Tanh())
             fc = []
             d = dp_hidden
             for _ in range(dp_fc_layers - 1):
@@ -411,7 +460,10 @@ class RolloutController(nn.Module):
         for _ in range(self.n_refine):
             exc = self.excursion_features(w_cur, vmask)
             inp = torch.cat([ctx, self.dp_max * torch.tanh(raw), exc], dim=1)
-            h, c = self.dp_cell(inp, (h, c))
+            if self.dp_cell_type == 'lstm':
+                h, c = self.dp_cell(inp, (h, c))
+            else:
+                h = self.dp_cell(inp)
             raw = raw + self.dp_fc(h)
             dP = self.dp_max * torch.tanh(raw)
             w_cur = self.rollout(x0d, Yd, Pd, dP=dP)

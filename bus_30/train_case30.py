@@ -118,6 +118,20 @@ p.add_argument('--dp_head', type=str, default='linear',
                     "head trains from the control objective.")
 p.add_argument('--dp_hidden', type=int, default=384)
 p.add_argument('--dp_fc_layers', type=int, default=2)
+p.add_argument('--encoder', choices=['lstm', 'mlp'], default='lstm',
+               help="Window encoder. 'lstm' (default): shared projection -> "
+                    "residual LSTM stack -> pooling -> MLP trunk. 'mlp' "
+                    "(ablation): shared projection to --mlp_proj per step -> "
+                    "flatten -> MLP trunk of the same depth/width, no "
+                    "recurrence. Everything else is identical.")
+p.add_argument('--mlp_proj', type=int, default=160,
+               help='Per-step projection width for --encoder mlp. 160 matches '
+                    'the LSTM encoder in size (6.93M vs 6.87M parameters on '
+                    'the 30-bus), so a difference in results cannot be put '
+                    'down to capacity. 64 gives a half-size encoder (3.2M).')
+p.add_argument('--dp_cell', choices=['lstm', 'mlp'], default='lstm',
+               help="Cascade refinement cell. 'lstm' (default) carries memory "
+                    "across refinement rounds; 'mlp' (ablation) is memoryless.")
 p.add_argument('--n_refine', type=int, default=3,
                help='Refinement steps in the cascade head. Each costs one '
                     'extra rollout (forward and backward).')
@@ -444,19 +458,40 @@ def make_batch(ks, rng):
 enc = FaultEncoder(N_FEAT, w_max_steps=W_STEPS, dt_window=args.dt_window,
                    lstm_layers=args.lstm_layers,
                    init_window=args.init_window, max_window=args.w_max,
-                   beta0=args.beta0)
+                   beta0=args.beta0, encoder=args.encoder,
+                   mlp_proj=args.mlp_proj)
 model = RolloutController(S, enc, horizon=args.horizon, dt_roll=args.dt_roll,
                           omega_limit=OMEGA_LIMIT, margin=args.margin,
                           dp_head=args.dp_head, dp_hidden=args.dp_hidden,
                           dp_fc_layers=args.dp_fc_layers,
-                          n_refine=args.n_refine).to(device)
+                          n_refine=args.n_refine,
+                          dp_cell=args.dp_cell).to(device)
 if INIT_CK is not None:
+    ia = INIT_CK.get('args', {})
+    if ia.get('encoder', 'lstm') != args.encoder:
+        raise SystemExit(
+            f"--init checkpoint has encoder='{ia.get('encoder', 'lstm')}' but "
+            f"this run asks for '{args.encoder}'. The encoder layers differ, so "
+            f"the weights cannot be carried over; train stage 1 afresh with the "
+            f"same --encoder.")
+    if ia.get('dp_cell', 'lstm') != args.dp_cell:
+        # The identifier carries over; only the dP refinement head changes.
+        # Drop its weights so it starts fresh (from a stage-1 checkpoint they
+        # were never trained anyway -- control was off).
+        INIT_CK['model'] = {k: v for k, v in INIT_CK['model'].items()
+                            if not k.startswith(('dp_cell.', 'dp_fc.'))}
+        print(f"  init: dP cell changes '{ia.get('dp_cell', 'lstm')}' -> "
+              f"'{args.dp_cell}'; identifier weights kept, dP head starts fresh")
     missing, unexpected = model.load_state_dict(INIT_CK['model'], strict=False)
     if missing or unexpected:
         print(f"  init: {len(missing)} missing, {len(unexpected)} unexpected "
               f"parameter(s) -- architecture differs from the checkpoint")
     print(f"Initialised from {args.init}")
-print(f"Parameters: {sum(q.numel() for q in model.parameters()):,}")
+print(f"Parameters: {sum(q.numel() for q in model.parameters()):,}   "
+      f"(encoder: {args.encoder}"
+      + (f", per-step projection {args.mlp_proj}" if args.encoder == 'mlp' else "")
+      + (f"; dP refinement cell: {args.dp_cell}" if args.dp_head == 'cascade' else "")
+      + ")")
 print(f"Window: {W_STEPS} steps @ {args.dt_window*1000:.0f} ms "
       f"(max {args.w_max}s, init {args.init_window}s)")
 print(f"Rollout: {N_ROLL} steps @ {args.dt_roll*1000:.0f} ms = {args.horizon}s")

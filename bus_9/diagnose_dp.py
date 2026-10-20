@@ -137,15 +137,19 @@ S = IEEE9(args.base, args.sys, dtype=torch.float32, device=device, lines=lines)
 enc = FaultEncoder(ck['n_feat'], w_max_steps=W_STEPS, dt_window=A['dt_window'],
                    lstm_layers=A.get('lstm_layers', 10),
                    init_window=A['init_window'] / A['w_max'],
-                   max_window=A['w_max'], beta0=A['beta0'])
+                   max_window=A['w_max'], beta0=A['beta0'],
+                   encoder=A.get('encoder', 'lstm'),
+                   mlp_proj=A.get('mlp_proj'))
 model = RolloutController(S, enc, horizon=A['horizon'], dt_roll=A['dt_roll'],
                           omega_limit=OMEGA_LIMIT, margin=A.get('margin', 1e-4),
                           dp_head=A.get('dp_head', 'linear'),
                           dp_hidden=A.get('dp_hidden', 128),
                           dp_fc_layers=A.get('dp_fc_layers', 2),
-                          n_refine=A.get('n_refine', 3)).to(device)
+                          n_refine=A.get('n_refine', 3),
+                          dp_cell=A.get('dp_cell', 'lstm')).to(device)
 model.load_state_dict(ck['model']); model.eval()
-enc.beta.fill_(A['beta_min'])
+# beta is restored by load_state_dict above; see verify_true.py / case30_common.py.
+# Forcing beta_min would diagnose a model other than the one that was trained.
 
 rng = np.random.default_rng(args.seed)
 ks = rng.choice(pool, args.n, replace=True)

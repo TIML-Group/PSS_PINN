@@ -114,6 +114,18 @@ p.add_argument('--dp_head', type=str, default='linear',
                     "head trains from the control objective.")
 p.add_argument('--dp_hidden', type=int, default=128)
 p.add_argument('--dp_fc_layers', type=int, default=2)
+p.add_argument('--encoder', choices=['lstm', 'mlp'], default='lstm',
+               help="Window encoder. 'lstm' (default): shared projection -> "
+                    "residual LSTM stack -> pooling -> MLP trunk. 'mlp' "
+                    "(ablation): shared per-step projection -> flatten -> MLP "
+                    "trunk of the same depth/width, no recurrence.")
+p.add_argument('--mlp_proj', type=int, default=None,
+               help='Per-step projection width for --encoder mlp. Default: '
+                    'the width that matches the LSTM encoder in size (33 for '
+                    'the 9-bus configuration, 476k vs 471k parameters).')
+p.add_argument('--dp_cell', choices=['lstm', 'mlp'], default='lstm',
+               help="Cascade refinement cell. 'lstm' (default) carries memory "
+                    "across refinement rounds; 'mlp' (ablation) is memoryless.")
 p.add_argument('--n_refine', type=int, default=3,
                help='Refinement steps in the cascade head. Each costs one '
                     'extra rollout (forward and backward).')
@@ -364,13 +376,21 @@ S = IEEE9(args.base, args.sys, dtype=torch.float32, device=device, lines=lines)
 enc = FaultEncoder(N_FEAT, w_max_steps=W_STEPS, dt_window=args.dt_window,
                    lstm_layers=args.lstm_layers,
                    init_window=args.init_window, max_window=args.w_max,
-                   beta0=args.beta0)
+                   beta0=args.beta0, encoder=args.encoder,
+                   mlp_proj=args.mlp_proj)
+if args.encoder == 'mlp':
+    args.mlp_proj = enc.mlp_proj          # store the width actually used
 model = RolloutController(S, enc, horizon=args.horizon, dt_roll=args.dt_roll,
                           omega_limit=OMEGA_LIMIT, margin=args.margin,
                           dp_head=args.dp_head, dp_hidden=args.dp_hidden,
                           dp_fc_layers=args.dp_fc_layers,
-                          n_refine=args.n_refine).to(device)
-print(f"Parameters: {sum(q.numel() for q in model.parameters()):,}")
+                          n_refine=args.n_refine,
+                          dp_cell=args.dp_cell).to(device)
+print(f"Parameters: {sum(q.numel() for q in model.parameters()):,}   "
+      f"(encoder: {args.encoder}"
+      + (f", per-step projection {args.mlp_proj}" if args.encoder == 'mlp' else "")
+      + (f"; dP refinement cell: {args.dp_cell}" if args.dp_head == 'cascade' else "")
+      + ")")
 print(f"Window: {W_STEPS} steps @ {args.dt_window*1000:.0f} ms "
       f"(max {args.w_max}s, init {args.init_window}s)")
 print(f"Rollout: {N_ROLL} steps @ {args.dt_roll*1000:.0f} ms = {args.horizon}s")

@@ -1,0 +1,93 @@
+{
+ "test": {
+  "traj": 0.0057048002345254645,
+  "cls": 0.0697612096555531,
+  "acc": 0.98583984375,
+  "acc_active": 0.9805900734265028,
+  "acc_type": 0.9829192609289048,
+  "acc_top5": 0.99650622168498,
+  "acc_fault": 0.9902950478312762,
+  "acc_type_c": 0.9953416152307706,
+  "detect": 0.987548828125,
+  "alpha": 0.005189649531877347,
+  "ool_acc": 0.9819389161202379,
+  "ool_tpr": 0.9577167046120505,
+  "ool_tnr": 0.9900673938457236,
+  "dp_err": NaN,
+  "dp_rel": NaN,
+  "dp_success": NaN,
+  "dp_rescue": NaN,
+  "dp_rescue_all": NaN,
+  "dp_reachable": NaN,
+  "dp_norm": NaN,
+  "rescue_by_age": [
+   [
+    0,
+    NaN
+   ],
+   [
+    0,
+    NaN
+   ],
+   [
+    0,
+    NaN
+   ],
+   [
+    0,
+    NaN
+   ],
+   [
+    0,
+    NaN
+   ]
+  ]
+ },
+ "val_best": {
+  "traj": 0.0027308057760819793,
+  "cls": 0.07792643457651138,
+  "acc": 0.986083984375,
+  "acc_active": 0.980354393024474,
+  "acc_type": 0.9807396008071988,
+  "acc_top5": 0.9949922919365217,
+  "acc_fault": 0.9907550101379401,
+  "acc_type_c": 0.9934514621832338,
+  "detect": 0.986572265625,
+  "alpha": 0.004019081309277873,
+  "ool_acc": 0.9807792211353005,
+  "ool_tpr": 0.9610655781064854,
+  "ool_tnr": 0.9874738999224406,
+  "dp_err": NaN,
+  "dp_rel": NaN,
+  "dp_success": NaN,
+  "dp_rescue": NaN,
+  "dp_rescue_all": NaN,
+  "dp_reachable": NaN,
+  "dp_norm": NaN,
+  "rescue_by_age": [
+   [
+    0,
+    NaN
+   ],
+   [
+    0,
+    NaN
+   ],
+   [
+    0,
+    NaN
+   ],
+   [
+    0,
+    NaN
+   ],
+   [
+    0,
+    NaN
+   ]
+  ]
+ },
+ "epoch": 54,
+ "window_s": 0.4228842258453369,
+ "n_test": 500
+}

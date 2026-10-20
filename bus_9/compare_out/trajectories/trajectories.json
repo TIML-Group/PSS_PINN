@@ -1,0 +1,95 @@
+[
+ {
+  "scenario": 2743,
+  "type": "gen",
+  "t_decision": 2.05111081308787,
+  "generator": 2,
+  "needed_rescue": true,
+  "peak_free_run": 0.007050573825836182,
+  "models": {
+   "LSTM+LSTM": {
+    "dP": [
+     0.12057586759328842,
+     0.12476614117622375,
+     0.13363516330718994
+    ],
+    "peak_run": 0.003918588161468506,
+    "peak_window": 0.0026920437812805176,
+    "status": "inside all run"
+   },
+   "MLP+MLP": {
+    "dP": [
+     0.11039433628320694,
+     0.13317325711250305,
+     0.11159178614616394
+    ],
+    "peak_run": 0.00407487154006958,
+    "peak_window": 0.002869129180908203,
+    "status": "inside all run"
+   }
+  },
+  "file": "compare_out\\trajectories\\gen_sc2743_G2.png"
+ },
+ {
+  "scenario": 3852,
+  "type": "load",
+  "t_decision": 2.1725770261962674,
+  "generator": 2,
+  "needed_rescue": true,
+  "peak_free_run": 0.006509542465209961,
+  "models": {
+   "LSTM+LSTM": {
+    "dP": [
+     0.09804697334766388,
+     0.10689396411180496,
+     0.09486527740955353
+    ],
+    "peak_run": 0.00360262393951416,
+    "peak_window": 0.00360262393951416,
+    "status": "inside all run"
+   },
+   "MLP+MLP": {
+    "dP": [
+     0.14779266715049744,
+     0.14871977269649506,
+     0.12768855690956116
+    ],
+    "peak_run": 0.002926766872406006,
+    "peak_window": 0.002926766872406006,
+    "status": "inside all run"
+   }
+  },
+  "file": "compare_out\\trajectories\\load_sc3852_G2.png"
+ },
+ {
+  "scenario": 9989,
+  "type": "line",
+  "t_decision": 4.055860827295158,
+  "generator": 3,
+  "needed_rescue": false,
+  "peak_free_run": 0.006095767021179199,
+  "models": {
+   "LSTM+LSTM": {
+    "dP": [
+     -0.02817476913332939,
+     -0.011929942294955254,
+     -0.19358161091804504
+    ],
+    "peak_run": 0.0071149468421936035,
+    "peak_window": 0.0035332441329956055,
+    "status": "inside judged window only"
+   },
+   "MLP+MLP": {
+    "dP": [
+     -0.07316958904266357,
+     0.04111670330166817,
+     -0.17378319799900055
+    ],
+    "peak_run": 0.007338464260101318,
+    "peak_window": 0.0036634206771850586,
+    "status": "inside judged window only"
+   }
+  },
+  "file": "compare_out\\trajectories\\line_sc9989_G3.png"
+ }
+]

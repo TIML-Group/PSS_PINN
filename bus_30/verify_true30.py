@@ -143,6 +143,16 @@ tot = dict(n=0, need=0, resc_true=0, resc_model=0, ok_true=0, ok_n=0, agree=0,
 norm_all, norm_need, norm_quiet = [], [], []
 age_t = [0] * len(AGE_BINS); age_m = [0] * len(AGE_BINS); age_n = [0] * len(AGE_BINS)
 by_type = {t: [0, 0] for t in TYPE_NAMES}
+# Q13: per-case record for the needy cases of every type, so the misses can be
+# cross-tabulated by true severity and by how much actuator authority was left
+# unused. Columns: [type, alpha, rescued, ||dP||, max|dP|/dp_max].
+case_rows = []
+# Q5: calibration of p_fail, the bounded surrogate the control loss minimises.
+# Its mean is only the expected failure rate UNDER THE MODEL'S OWN ROLLOUT; this
+# records it against the TRUE-dynamics outcome as well, so the gap between the
+# two is measured rather than assumed.
+# Columns: [p_fail, fail_true, fail_model_tgt, fail_model_limit, needy].
+calib_rows = []
 
 n_done = 0
 while n_done < args.n:
@@ -198,6 +208,32 @@ while n_done < args.n:
         m = nd & (y_type[ks] == ti_ + 1)
         by_type[tname][0] += int(wt[m].sum()); by_type[tname][1] += int(m.sum())
 
+    # Q5 record, over every REACHABLE instant -- the population the control loss
+    # is actually averaged over. p_fail uses the same expression as the loss:
+    # a sigmoid on the model's own judged peak against (limit - margin).
+    rch = reach.cpu().numpy()
+    if rch.any():
+        tgt_c = model.limit - model.margin
+        p_fail_c = torch.sigmoid((pk_ctrl_m - tgt_c) / A['dp_tau']).cpu().numpy()
+        calib_rows.append(np.stack([
+            p_fail_c[rch],
+            (~win_t.cpu().numpy())[rch].astype(float),          # true failure
+            (pk_ctrl_m.cpu().numpy() > tgt_c)[rch].astype(float),   # model, at tgt
+            (~win_m.cpu().numpy())[rch].astype(float),          # model, at limit
+            nd[rch].astype(float),
+        ], axis=1))
+
+    # Q13 record (needy cases only -- the ones a rescue rate is computed over)
+    if nd.any():
+        sat = (dP.abs().amax(dim=1) / model.dp_max).cpu().numpy()
+        case_rows.append(np.stack([
+            y_type[ks][nd].astype(float),
+            meta_alpha[ks][nd],
+            wt[nd].astype(float),
+            nrm.cpu().numpy()[nd],
+            sat[nd],
+        ], axis=1))
+
     n_done += bs
     print(f"\r  {n_done}/{args.n}", end='', flush=True)
 print()
@@ -229,6 +265,168 @@ print(f"  mean ||dP||                          : {mean(norm_all):.4f} pu  "
 print(f"\n  rescue by fault age (true)  {fmt_age(AGE_BINS, age_t, age_n)}")
 print(f"  rescue by fault age (model) {fmt_age(AGE_BINS, age_m, age_n)}")
 
+# ── Q13: where do the misses live? ──────────────────────────────────────────
+# A failure with dP at the +/-dp_max rail is actuator-limited: no set-point
+# change inside the limits could have saved it. A failure with authority to
+# spare is the head's -- a solution existed and it did not emit one. Splitting
+# by true alpha separates "severe faults are simply beyond reach" from "the
+# head under-corrects when it matters".
+ALPHA_BINS = [(0.10, 0.30), (0.30, 0.50), (0.50, 0.70), (0.70, 0.90), (0.90, 1.01)]
+RAIL = 0.95
+
+if case_rows:
+    C = np.concatenate(case_rows, axis=0)
+    print(f"\n{'-'*70}")
+    print(f"WHERE DO THE MISSES LIVE?  ({len(C)} needy cases, true dynamics)")
+    print(f"{'-'*70}")
+    print(f"  {'type':5s} {'alpha':12s} {'n':>5s} {'rescued':>8s} "
+          f"{'mean|dP|':>9s} {'at rail':>8s} {'miss@rail':>10s} {'miss spare':>11s}")
+    for ti_, tname in enumerate(TYPE_NAMES):
+        T = C[C[:, 0] == ti_ + 1]
+        if not len(T):
+            continue
+        for lo_, hi_ in ALPHA_BINS:
+            B = T[(T[:, 1] >= lo_) & (T[:, 1] < hi_)]
+            if not len(B):
+                continue
+            miss = B[B[:, 2] == 0]
+            m_rail = int((miss[:, 4] >= RAIL).sum()) if len(miss) else 0
+            print(f"  {tname:5s} {lo_:.2f}-{hi_:<7.2f} {len(B):5d} "
+                  f"{B[:, 2].mean():8.3f} {B[:, 3].mean():9.4f} "
+                  f"{100*(B[:, 4] >= RAIL).mean():7.1f}% "
+                  f"{m_rail:10d} {len(miss)-m_rail:11d}")
+        miss = T[T[:, 2] == 0]
+        m_rail = int((miss[:, 4] >= RAIL).sum()) if len(miss) else 0
+        print(f"  {tname:5s} {'ALL':12s} {len(T):5d} {T[:, 2].mean():8.3f} "
+              f"{T[:, 3].mean():9.4f} {100*(T[:, 4] >= RAIL).mean():7.1f}% "
+              f"{m_rail:10d} {len(miss)-m_rail:11d}")
+
+    G = C[C[:, 0] == 1]                      # generator trips
+    gmiss = G[G[:, 2] == 0]
+    if len(gmiss):
+        n_rail = int((gmiss[:, 4] >= RAIL).sum())
+        n_spare = len(gmiss) - n_rail
+        print(f"\n  GENERATOR TRIPS: {len(gmiss)} of {len(G)} needy cases missed "
+              f"(rescue {G[:, 2].mean():.4f})")
+        print(f"    dP at the rail (>={RAIL:.2f} of dp_max): {n_rail:4d}  "
+              f"({100*n_rail/len(gmiss):.1f}%)  -> actuator-limited")
+        print(f"    authority to spare                   : {n_spare:4d}  "
+              f"({100*n_spare/len(gmiss):.1f}%)  -> head under-corrects")
+        if (G[:, 2] == 1).any():
+            print(f"    mean true alpha: misses {gmiss[:, 1].mean():.3f}  vs  "
+                  f"rescued {G[G[:, 2] == 1][:, 1].mean():.3f}")
+        if n_rail > 2 * n_spare:
+            print("    -> MARGINAL: most misses had no authority left. The gap is a\n"
+                  "       feasibility limit of G1/G2, not a head failure.")
+        elif n_spare > 2 * n_rail:
+            print("    -> HEAD: most misses left authority unused. A larger correction\n"
+                  "       existed and was not emitted -- an amortisation gap.")
+        else:
+            print("    -> MIXED: neither cause dominates; both are live.")
+    elif len(G):
+        print(f"\n  GENERATOR TRIPS: all {len(G)} needy cases rescued.")
+
+# ── Q5: is p_fail calibrated? ───────────────────────────────────────────────
+# The control loss minimises mean(p_fail). That mean is the expected failure
+# rate of the MODEL'S rollout, which is only useful if (a) p_fail tracks the
+# model's own outcome, and (b) the model's outcome tracks the true one. This
+# separates the two so a miscalibration can be attributed.
+#
+# One deliberate offset to keep in mind: p_fail is a surrogate for
+# "peak > limit - margin", while the true outcome is "peak > limit". The margin
+# makes p_fail conservative ON PURPOSE, so a positive bias against the true
+# outcome is expected and is not by itself a fault.
+if calib_rows:
+    K = np.concatenate(calib_rows, axis=0)
+    pf_, ft_, fm_tgt, fm_lim, ndy = (K[:, 0], K[:, 1], K[:, 2], K[:, 3], K[:, 4])
+    EDGES = [0.0, 0.05, 0.1, 0.2, 0.3, 0.5, 0.7, 0.9, 0.95, 1.0001]
+
+    def reliability(mask, label):
+        p, t, m, g = pf_[mask], ft_[mask], fm_lim[mask], fm_tgt[mask]
+        if not len(p):
+            return
+        print(f"\n  {label}  (n = {len(p)})")
+        print(f"    {'p_fail bin':14s} {'n':>6s} {'mean p':>8s} "
+              f"{'model@tgt':>10s} {'model@limit':>12s} {'actual TRUE':>12s}")
+        ece = 0.0
+        for lo_, hi_ in zip(EDGES[:-1], EDGES[1:]):
+            b_ = (p >= lo_) & (p < hi_)
+            if not b_.sum():
+                continue
+            ece += b_.sum() / len(p) * abs(p[b_].mean() - t[b_].mean())
+            print(f"    {lo_:.2f}-{hi_ if hi_ <= 1 else 1.0:<9.2f} {int(b_.sum()):6d} "
+                  f"{p[b_].mean():8.3f} {g[b_].mean():10.3f} {m[b_].mean():12.3f} "
+                  f"{t[b_].mean():12.3f}")
+        print(f"    {'OVERALL':14s} {len(p):6d} {p.mean():8.3f} "
+              f"{g.mean():10.3f} {m.mean():12.3f} {t.mean():12.3f}")
+        print(f"    expected calibration error (vs TRUE): {ece:.4f}")
+        # The honest test of the surrogate is against the event it is a
+        # surrogate FOR (peak > tgt). Comparing it to peak > limit folds in the
+        # margin, which is a deliberate offset and not a calibration failure.
+        ece_tgt = 0.0
+        for lo_, hi_ in zip(EDGES[:-1], EDGES[1:]):
+            b_ = (p >= lo_) & (p < hi_)
+            if b_.sum():
+                ece_tgt += b_.sum() / len(p) * abs(p[b_].mean() - g[b_].mean())
+        print(f"    expected calibration error (vs its OWN event, peak>tgt): "
+              f"{ece_tgt:.4f}")
+        # overconfidence where it matters: confident-safe cases that still fail
+        lowm = p < 0.05
+        if lowm.sum():
+            print(f"    confident-safe bin (p<0.05): {int(lowm.sum())} cases, "
+                  f"p={p[lowm].mean():.3f}, TRUE failures {t[lowm].mean():.3f} "
+                  f"({int(t[lowm].sum())} cases)")
+        return p.mean(), t.mean(), m.mean(), g.mean()
+
+    print(f"\n{'-'*70}")
+    print("IS p_fail CALIBRATED?  (reachable instants; p_fail is what the control")
+    print("loss minimises, so its reliability is the loss's reliability)")
+    print(f"{'-'*70}")
+    res_all = reliability(np.ones(len(pf_), bool), 'ALL REACHABLE')
+    res_need = reliability(ndy > 0, 'NEEDING RESCUE')
+
+    if res_all:
+        mp, mt, mm, mg = res_all
+        print(f"\n  predicted failure rate (mean p_fail)   : {mp:.4f}")
+        print(f"  model's own rate at its OWN event (tgt): {mg:.4f}   "
+              f"[surrogate error {mp-mg:+.4f}]")
+        print(f"  model's own rate at the LIMIT          : {mm:.4f}   "
+              f"[margin offset {mg-mm:+.4f}, by design]")
+        print(f"  TRUE failure rate                      : {mt:.4f}   "
+              f"[rollout error {mm-mt:+.4f}]")
+        print(f"  net: p_fail vs reality                 : {mp-mt:+.4f}")
+        if abs(mp - mg) <= 0.02:
+            print("  -> the SURROGATE is sound: p_fail tracks the event it stands in\n"
+                  "     for. dp_tau needs no change.")
+        else:
+            print("  -> the SURROGATE itself is off against its own event; dp_tau is\n"
+                  "     the lever.")
+        # The rollout verdict must be read on the NEEDY cases. Over all reachable
+        # instants most are quiet and both the model and reality call them safe,
+        # which dilutes the error toward zero and can read as "trustworthy" while
+        # the rescue rate is several points optimistic.
+        if res_need:
+            _, nt, nm, _ = res_need
+            print(f"\n  on cases NEEDING RESCUE (the population that matters):")
+            print(f"    model's own failure rate : {nm:.4f}")
+            print(f"    TRUE failure rate        : {nt:.4f}   "
+                  f"[rollout error {nm-nt:+.4f}]")
+            if nm < nt - 0.02:
+                print("  -> the ROLLOUT is optimistic where it counts: the model\n"
+                      "     under-predicts failures on the cases it is meant to save.\n"
+                      "     --margin is the lever; the surrogate is not at fault.")
+            else:
+                print("  -> the ROLLOUT holds up on the needy cases.")
+        if mp > mt:
+            print(f"  -> net effect is CONSERVATIVE ({mp:.3f} predicted vs {mt:.3f}\n"
+                  f"     actual overall), so the objective errs toward over-correcting.")
+    calib_summary = {'n': int(len(pf_)), 'mean_p_fail': float(pf_.mean()),
+                     'true_failure_rate': float(ft_.mean()),
+                     'model_failure_rate': float(fm_lim.mean()),
+                     'model_failure_rate_at_tgt': float(fm_tgt.mean())}
+else:
+    calib_summary = None
+
 gap = r_model - r_true
 print(f"\n  model-internal minus true = {gap*100:+.1f} points")
 if abs(gap) < 0.02:
@@ -253,7 +451,8 @@ json.dump({'split': args.split, 'n_instants': tot['n'], 'n_need': tot['need'],
            'no_dp_full_run': R(tot['free_run'], tot['need']),
            'by_type': {t: {'n': n, 'true': R(h, n)} for t, (h, n) in by_type.items()},
            'by_age': [{'lo': lo, 'hi': hi, 'n': n, 'true': R(h, n), 'model': R(m, n)}
-                      for (lo, hi), h, m, n in zip(AGE_BINS, age_t, age_m, age_n)]},
+                      for (lo, hi), h, m, n in zip(AGE_BINS, age_t, age_m, age_n)],
+           'p_fail_calibration': calib_summary},
           open(os.path.join(out_dir, 'verify_results.json'), 'w'), indent=1)
 
 

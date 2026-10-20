@@ -124,12 +124,14 @@ class Setup:
                            dt_window=A['dt_window'],
                            lstm_layers=A['lstm_layers'],
                            init_window=A['init_window'], max_window=A['w_max'],
-                           beta0=A['beta0'])
+                           beta0=A['beta0'], encoder=A.get('encoder', 'lstm'),
+                           mlp_proj=A.get('mlp_proj', 160))
         self.model = RolloutController(
             self.S, enc, horizon=A['horizon'], dt_roll=A['dt_roll'],
             omega_limit=self.OMEGA_LIMIT, margin=A['margin'],
             dp_head=A['dp_head'], dp_hidden=A['dp_hidden'],
-            dp_fc_layers=A['dp_fc_layers'], n_refine=A['n_refine']).to(dev)
+            dp_fc_layers=A['dp_fc_layers'], n_refine=A['n_refine'],
+            dp_cell=A.get('dp_cell', 'lstm')).to(dev)
         self.model.load_state_dict(ck['model'])      # strict: shapes must match
         self.enc = enc
 
@@ -138,7 +140,8 @@ class Setup:
             print(f"Loaded {ckpt}: epoch {ck['epoch']}, window "
                   f"{ck['window_s']*1000:.1f} ms, mask beta "
                   f"{float(enc.beta)*1000:.1f} ms (from checkpoint), "
-                  f"dP head '{A['dp_head']}'")
+                  f"dP head '{A['dp_head']}', encoder "
+                  f"'{A.get('encoder', 'lstm')}', dP cell '{A.get('dp_cell', 'lstm')}'")
             print(f"Split from checkpoint: {len(self.idx_tr)} train / "
                   f"{len(self.idx_va)} val / {len(self.idx_te)} test   "
                   f"| feature normalisation: {norm_msg}")

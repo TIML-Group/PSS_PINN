@@ -1,0 +1,643 @@
+{
+ "system": 9,
+ "split": "test",
+ "n_instants": 4096,
+ "n_true": 2048,
+ "n_scenarios": 499,
+ "splits_identical": true,
+ "beta": "ckpt",
+ "dp_hold": "clear",
+ "seed": 11,
+ "models": {
+  "LSTM+LSTM": {
+   "path": "receding_cascade/refined/best.pt",
+   "epoch": 67,
+   "encoder": "lstm",
+   "dp_cell": "lstm",
+   "has_lstm": true,
+   "params": {
+    "total": 637954,
+    "encoder": 470527,
+    "dp_head": 167427
+   },
+   "window_ms": 97.50356525182724,
+   "latency_ms": {
+    "single": {
+     "decision": 685.6074566671547,
+     "encoder": 1.5327233326388523
+    },
+    "batch": {
+     "decision": 629.17265999907,
+     "encoder": 6.478706666772875
+    }
+   },
+   "metrics": {
+    "decision_acc": {
+     "value": 0.98974609375,
+     "ci": [
+      0.9864766088470448,
+      0.9926568196425661
+     ],
+     "n": 4096,
+     "n_scenarios": 499
+    },
+    "fault_acc": {
+     "value": 0.9932254422280767,
+     "ci": [
+      0.9899023892161725,
+      0.9962658700522778
+     ],
+     "n": 2657,
+     "n_scenarios": 492
+    },
+    "type_acc": {
+     "value": 0.9977418140760256,
+     "ci": [
+      0.9958362901491814,
+      0.9992587238832606
+     ],
+     "n": 2657,
+     "n_scenarios": 492
+    },
+    "detect_acc": {
+     "value": 0.98974609375,
+     "ci": [
+      0.9864766088470448,
+      0.9926568196425661
+     ],
+     "n": 4096,
+     "n_scenarios": 499
+    },
+    "alpha_rmse": {
+     "value": 0.05949361900496487,
+     "ci": [
+      0.05206375105797079,
+      0.06724878226840597
+     ],
+     "n": 1655,
+     "n_scenarios": 307
+    },
+    "omega_rmse": {
+     "value": 0.000672269017460557,
+     "ci": [
+      0.0006229101269572449,
+      0.0007225723154204462
+     ],
+     "n": 1391292,
+     "n_scenarios": 499
+    },
+    "ool_tpr": {
+     "value": 0.9130434782608695,
+     "ci": [
+      0.8823446794448117,
+      0.9391536091728894
+     ],
+     "n": 1150,
+     "n_scenarios": 228
+    },
+    "ool_tnr": {
+     "value": 0.9687258687258687,
+     "ci": [
+      0.9560226196908919,
+      0.9798249004297244
+     ],
+     "n": 2590,
+     "n_scenarios": 470
+    },
+    "rescue_model": {
+     "value": 0.9988558352402745,
+     "ci": [
+      0.996291257514453,
+      1.0
+     ],
+     "n": 874,
+     "n_scenarios": 189
+    },
+    "dP_norm": {
+     "value": 0.10269354259407493,
+     "ci": [
+      0.09281884078025644,
+      0.11339562808194245
+     ],
+     "n": 4096,
+     "n_scenarios": 499
+    },
+    "rescue_true": {
+     "value": 0.9768041237113402,
+     "ci": [
+      0.9584326609616952,
+      0.9915498892229784
+     ],
+     "n": 388,
+     "n_scenarios": 157
+    },
+    "rescue_true_end_of_run": {
+     "value": 0.9201030927835051,
+     "ci": [
+      0.8824822164740117,
+      0.954424050516956
+     ],
+     "n": 388,
+     "n_scenarios": 157
+    },
+    "harmed_pct": {
+     "value": 0.0,
+     "ci": [
+      0.0,
+      0.0
+     ],
+     "n": 1342,
+     "n_scenarios": 424
+    },
+    "dP_norm_need": {
+     "value": 0.32704155768157395,
+     "ci": [
+      0.2994945548249172,
+      0.3577033913032574
+     ],
+     "n": 388,
+     "n_scenarios": 157
+    },
+    "rescue_true_gen": {
+     "value": 0.9510869565217391,
+     "ci": [
+      0.9130371587462083,
+      0.9813671818575762
+     ],
+     "n": 184,
+     "n_scenarios": 74
+    },
+    "rescue_true_load": {
+     "value": 1.0,
+     "ci": [
+      1.0,
+      1.0
+     ],
+     "n": 204,
+     "n_scenarios": 83
+    },
+    "rescue_true_line": {
+     "value": NaN,
+     "ci": [
+      NaN,
+      NaN
+     ],
+     "n": 0,
+     "n_scenarios": 0
+    },
+    "rescue_true_age_0-50ms": {
+     "value": 0.8548387096774194,
+     "ci": [
+      0.7535326086956522,
+      0.94
+     ],
+     "n": 62,
+     "n_scenarios": 49
+    },
+    "rescue_true_age_50-100ms": {
+     "value": 1.0,
+     "ci": [
+      1.0,
+      1.0
+     ],
+     "n": 88,
+     "n_scenarios": 66
+    },
+    "rescue_true_age_100-200ms": {
+     "value": 1.0,
+     "ci": [
+      1.0,
+      1.0
+     ],
+     "n": 185,
+     "n_scenarios": 109
+    },
+    "rescue_true_age_200-500ms": {
+     "value": 1.0,
+     "ci": [
+      1.0,
+      1.0
+     ],
+     "n": 33,
+     "n_scenarios": 20
+    },
+    "rescue_true_age_>500ms": {
+     "value": 1.0,
+     "ci": [
+      1.0,
+      1.0
+     ],
+     "n": 20,
+     "n_scenarios": 17
+    },
+    "fault_acc_age_0-50ms": {
+     "value": 0.9628865979381444,
+     "ci": [
+      0.9444417786308381,
+      0.9792121313860445
+     ],
+     "n": 485,
+     "n_scenarios": 291
+    },
+    "fault_acc_age_50-100ms": {
+     "value": 1.0,
+     "ci": [
+      1.0,
+      1.0
+     ],
+     "n": 477,
+     "n_scenarios": 291
+    },
+    "fault_acc_age_100-200ms": {
+     "value": 1.0,
+     "ci": [
+      1.0,
+      1.0
+     ],
+     "n": 926,
+     "n_scenarios": 381
+    },
+    "fault_acc_age_200-500ms": {
+     "value": 1.0,
+     "ci": [
+      1.0,
+      1.0
+     ],
+     "n": 323,
+     "n_scenarios": 143
+    },
+    "fault_acc_age_>500ms": {
+     "value": 1.0,
+     "ci": [
+      1.0,
+      1.0
+     ],
+     "n": 446,
+     "n_scenarios": 235
+    }
+   }
+  },
+  "MLP+MLP": {
+   "path": "receding_fullmlp/refined/best.pt",
+   "epoch": 78,
+   "encoder": "mlp",
+   "dp_cell": "mlp",
+   "has_lstm": false,
+   "params": {
+    "total": 514461,
+    "encoder": 476442,
+    "dp_head": 38019
+   },
+   "window_ms": 280.3051769733429,
+   "latency_ms": {
+    "single": {
+     "decision": 676.9747299995894,
+     "encoder": 0.4727166660207634
+    },
+    "batch": {
+     "decision": 699.4274233341761,
+     "encoder": 0.3724366659298539
+    }
+   },
+   "metrics": {
+    "decision_acc": {
+     "value": 0.9873046875,
+     "ci": [
+      0.9813970222962508,
+      0.9922186059535808
+     ],
+     "n": 4096,
+     "n_scenarios": 499
+    },
+    "fault_acc": {
+     "value": 0.9890854347007904,
+     "ci": [
+      0.9817639099549265,
+      0.995000048058439
+     ],
+     "n": 2657,
+     "n_scenarios": 492
+    },
+    "type_acc": {
+     "value": 0.9973654497553632,
+     "ci": [
+      0.9952483241647355,
+      0.9992351889534034
+     ],
+     "n": 2657,
+     "n_scenarios": 492
+    },
+    "detect_acc": {
+     "value": 0.99169921875,
+     "ci": [
+      0.9886464489768685,
+      0.9944632346433253
+     ],
+     "n": 4096,
+     "n_scenarios": 499
+    },
+    "alpha_rmse": {
+     "value": 0.06323980123235905,
+     "ci": [
+      0.05497914078896892,
+      0.07115049374207465
+     ],
+     "n": 1655,
+     "n_scenarios": 307
+    },
+    "omega_rmse": {
+     "value": 0.0005713661682731582,
+     "ci": [
+      0.0005033646654515786,
+      0.0006577050813665867
+     ],
+     "n": 1391292,
+     "n_scenarios": 499
+    },
+    "ool_tpr": {
+     "value": 0.9495652173913044,
+     "ci": [
+      0.9274823756486065,
+      0.9679014487167132
+     ],
+     "n": 1150,
+     "n_scenarios": 228
+    },
+    "ool_tnr": {
+     "value": 0.9826254826254827,
+     "ci": [
+      0.9748822605965463,
+      0.9893837443295765
+     ],
+     "n": 2590,
+     "n_scenarios": 470
+    },
+    "rescue_model": {
+     "value": 1.0,
+     "ci": [
+      1.0,
+      1.0
+     ],
+     "n": 874,
+     "n_scenarios": 189
+    },
+    "dP_norm": {
+     "value": 0.13229404749201024,
+     "ci": [
+      0.1214397336970194,
+      0.14405418006024376
+     ],
+     "n": 4096,
+     "n_scenarios": 499
+    },
+    "rescue_true": {
+     "value": 0.9871134020618557,
+     "ci": [
+      0.9752471415872237,
+      0.9973684210526316
+     ],
+     "n": 388,
+     "n_scenarios": 157
+    },
+    "rescue_true_end_of_run": {
+     "value": 0.9226804123711341,
+     "ci": [
+      0.8871339967554307,
+      0.9522642976788704
+     ],
+     "n": 388,
+     "n_scenarios": 157
+    },
+    "harmed_pct": {
+     "value": 0.0,
+     "ci": [
+      0.0,
+      0.0
+     ],
+     "n": 1342,
+     "n_scenarios": 424
+    },
+    "dP_norm_need": {
+     "value": 0.3938463034501933,
+     "ci": [
+      0.36309216731371285,
+      0.42772324858467103
+     ],
+     "n": 388,
+     "n_scenarios": 157
+    },
+    "rescue_true_gen": {
+     "value": 0.9728260869565217,
+     "ci": [
+      0.9488342277877162,
+      0.9942528735632183
+     ],
+     "n": 184,
+     "n_scenarios": 74
+    },
+    "rescue_true_load": {
+     "value": 1.0,
+     "ci": [
+      1.0,
+      1.0
+     ],
+     "n": 204,
+     "n_scenarios": 83
+    },
+    "rescue_true_line": {
+     "value": NaN,
+     "ci": [
+      NaN,
+      NaN
+     ],
+     "n": 0,
+     "n_scenarios": 0
+    },
+    "rescue_true_age_0-50ms": {
+     "value": 0.9193548387096774,
+     "ci": [
+      0.8478168754605748,
+      0.9821506892230576
+     ],
+     "n": 62,
+     "n_scenarios": 49
+    },
+    "rescue_true_age_50-100ms": {
+     "value": 1.0,
+     "ci": [
+      1.0,
+      1.0
+     ],
+     "n": 88,
+     "n_scenarios": 66
+    },
+    "rescue_true_age_100-200ms": {
+     "value": 1.0,
+     "ci": [
+      1.0,
+      1.0
+     ],
+     "n": 185,
+     "n_scenarios": 109
+    },
+    "rescue_true_age_200-500ms": {
+     "value": 1.0,
+     "ci": [
+      1.0,
+      1.0
+     ],
+     "n": 33,
+     "n_scenarios": 20
+    },
+    "rescue_true_age_>500ms": {
+     "value": 1.0,
+     "ci": [
+      1.0,
+      1.0
+     ],
+     "n": 20,
+     "n_scenarios": 17
+    },
+    "fault_acc_age_0-50ms": {
+     "value": 0.9731958762886598,
+     "ci": [
+      0.9568918868487833,
+      0.9874490062761506
+     ],
+     "n": 485,
+     "n_scenarios": 291
+    },
+    "fault_acc_age_50-100ms": {
+     "value": 1.0,
+     "ci": [
+      1.0,
+      1.0
+     ],
+     "n": 477,
+     "n_scenarios": 291
+    },
+    "fault_acc_age_100-200ms": {
+     "value": 0.9946004319654428,
+     "ci": [
+      0.9861993615914039,
+      1.0
+     ],
+     "n": 926,
+     "n_scenarios": 381
+    },
+    "fault_acc_age_200-500ms": {
+     "value": 0.9876160990712074,
+     "ci": [
+      0.9704112718964204,
+      1.0
+     ],
+     "n": 323,
+     "n_scenarios": 143
+    },
+    "fault_acc_age_>500ms": {
+     "value": 0.984304932735426,
+     "ci": [
+      0.9664215924557651,
+      0.9978448275862069
+     ],
+     "n": 446,
+     "n_scenarios": 235
+    }
+   }
+  }
+ },
+ "differences": {
+  "MLP+MLP - LSTM+LSTM": {
+   "decision_acc": {
+    "diff": -0.00244140625,
+    "lo": -0.008023061497326237,
+    "hi": 0.002210406739797548,
+    "significant": false,
+    "n_scenarios": 499
+   },
+   "fault_acc": {
+    "diff": -0.004140007527286382,
+    "lo": -0.011517758761640707,
+    "hi": 0.0018741333162248044,
+    "significant": false,
+    "n_scenarios": 492
+   },
+   "alpha_rmse": {
+    "diff": 0.0037461822273941736,
+    "lo": -0.0012531854534823378,
+    "hi": 0.008850701931565425,
+    "significant": false,
+    "n_scenarios": 307
+   },
+   "omega_rmse": {
+    "diff": -0.00010090284918739872,
+    "lo": -0.00015984702138960153,
+    "hi": -1.6326221625789253e-05,
+    "significant": true,
+    "n_scenarios": 499
+   },
+   "ool_tpr": {
+    "diff": 0.03652173913043488,
+    "lo": 0.017072732845820286,
+    "hi": 0.058872482317755846,
+    "significant": true,
+    "n_scenarios": 228
+   },
+   "ool_tnr": {
+    "diff": 0.013899613899613916,
+    "lo": 0.004178834580813059,
+    "hi": 0.024381277083787924,
+    "significant": true,
+    "n_scenarios": 470
+   },
+   "rescue_model": {
+    "diff": 0.0011441647597254523,
+    "lo": 0.0,
+    "hi": 0.0037087424855469426,
+    "significant": false,
+    "n_scenarios": 189
+   },
+   "dP_norm": {
+    "diff": 0.02960050489793531,
+    "lo": 0.02682011631142228,
+    "hi": 0.03261635060633071,
+    "significant": true,
+    "n_scenarios": 499
+   },
+   "rescue_true": {
+    "diff": 0.010309278350515538,
+    "lo": -0.0025906735751294345,
+    "hi": 0.02695599912581046,
+    "significant": false,
+    "n_scenarios": 157
+   },
+   "rescue_true_gen": {
+    "diff": 0.021739130434782594,
+    "lo": -0.005555555555555536,
+    "hi": 0.05714285714285716,
+    "significant": false,
+    "n_scenarios": 74
+   },
+   "rescue_true_end_of_run": {
+    "diff": 0.002577319587628968,
+    "lo": -0.027472527472527486,
+    "hi": 0.037467643008339574,
+    "significant": false,
+    "n_scenarios": 157
+   },
+   "harmed_pct": {
+    "diff": 0.0,
+    "lo": 0.0,
+    "hi": 0.0,
+    "significant": false,
+    "n_scenarios": 424
+   },
+   "case_by_case": {
+    "both": 378,
+    "only_A": 1,
+    "only_B": 5,
+    "neither": 4
+   }
+  }
+ }
+}
