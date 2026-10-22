@@ -579,12 +579,21 @@ def evaluate(pool, ctrl_on):
         if n:
             tot[k] += float(v) * n; cnt[k] += n
 
-    for _ in range(n_val_batches):
-        ks_b = rng_v.choice(pool, val_bs, replace=True)
-        feat, x_meas, fut, cls, alpha_t, active, vmask, age, ks, tk = make_batch(ks_b, rng_v)
-        feat, x_meas, fut = feat.to(device), x_meas.to(device), fut.to(device)
-        cls, alpha_t = cls.to(device), alpha_t.to(device)
-        active, vmask = active.to(device), vmask.to(device)
+    # The rng is fixed, so every pass scores the SAME instants — build them once
+    # and reuse the device tensors (the per-epoch numpy rebuild of the val
+    # batches was pure overhead on the hot path).
+    global _VAL_CACHE
+    try:
+        val_batches = _VAL_CACHE
+    except NameError:
+        val_batches = []
+        rng_v = np.random.default_rng(12345)   # consumed ONCE, deterministically
+        for _ in range(n_val_batches):
+            ks_b = rng_v.choice(pool, val_bs, replace=True)
+            _b = make_batch(ks_b, rng_v)
+            val_batches.append(tuple(t.to(device) for t in _b[:8]) + (_b[8],))
+        _VAL_CACHE = val_batches
+    for feat, x_meas, fut, cls, alpha_t, active, vmask, age, ks in val_batches:
         o = model(feat, x_meas, hard=True, ctrl=ctrl_on, vmask=vmask)
 
         se = ((o['w_free'] - fut[:, :, 0:NG]) / 0.01) ** 2

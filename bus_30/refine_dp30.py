@@ -177,24 +177,34 @@ def _val_batches(pool):
 
 
 class _Prefetcher:
-    def __init__(self):
+    def __init__(self, orders, seeds):
+        # orders: per-epoch permutations (pre-drawn, deterministic schedule);
+        # seeds[ep][idx] is the rng seed for that epoch's batch idx.
         self.ex = _TPE(max_workers=1)
         self.q = _queue.deque()
-        self.seeds = [int(rng_b.integers(0, 2**63 - 1)) for _ in range(n_batches)]
-        self.order = None
-        self.i = 0
+        self.orders, self.seeds, self.n_ep = orders, seeds, len(orders)
+        self.epoch = 0
+        self.i = 0              # ABSOLUTE cursor; epoch = i // n_batches
+
+    def _ep_idx(self, bi):
+        ep, idx = divmod(bi, n_batches)
+        return ep, idx
 
     def _submit(self, bi):
-        if bi >= n_batches:
-            self.q.append(None)   # end-of-schedule marker; next() returns None
+        ep, idx = self._ep_idx(bi)
+        if ep >= self.n_ep:          # beyond the final epoch: permanent marker
+            self.q.append((self.n_ep - 1, None))
             return
-        ks_b = self.order[bi * args.batch_size:(bi + 1) * args.batch_size]
+        if ep < self.epoch:          # stale slot (only if pipeline backed up)
+            self.q.append((ep, None))
+            return
+        ks_b = self.orders[ep][idx * args.batch_size:(idx + 1) * args.batch_size]
         if not len(ks_b):
-            self.q.append(None)
+            self.q.append((ep, None))
             return
-        seed, ks_ = self.seeds[bi], ks_b
-        self.q.append(self.ex.submit(
-            lambda s=seed, k=ks_: su.make_batch(k, np.random.default_rng(s))))
+        seed = self.seeds[ep][idx]
+        self.q.append((ep, self.ex.submit(
+            lambda s=seed, k=ks_b, e=ep: (e, su.make_batch(k, np.random.default_rng(s))))))
 
     def start(self):
         for _ in range(2):
@@ -202,11 +212,21 @@ class _Prefetcher:
             self.i += 1
 
     def next(self):
-        f = self.q.popleft()
-        r = f.result() if f is not None else None
-        self._submit(self.i)
-        self.i += 1
-        return r
+        """Next batch of the CURRENT epoch; entries from earlier epochs are
+        drained and discarded; returns None at end of the current epoch."""
+        while True:
+            ep, item = self.q.popleft()
+            val = item.result() if item is not None else None
+            self._submit(self.i)
+            self.i += 1
+            if ep != self.epoch:
+                continue             # stale entry: discard
+            if val is None:
+                return None          # end-of-epoch marker for THIS epoch
+            _, batch = val
+            if _ != self.epoch:
+                continue
+            return batch
 
     def close(self):
         self.ex.shutdown(wait=False)
@@ -274,15 +294,16 @@ print(f"Epoch = {len(epoch_units)} decision instants "
       f"({len(su.idx_tr)} scenarios x {args.instants_per_scenario}) = {n_batches} "
       f"batches   |   validation: {n_val_batches * val_bs} fixed instants each epoch")
 
-pf = _Prefetcher()
-order = rng_b.permutation(epoch_units)
-pf.order = order
+# Pre-draw every epoch's permutation and batch seeds up front: deterministic
+# schedule per --seed, independent of pipeline timing.
+_all_orders = [rng_b.permutation(epoch_units) for _ in range(args.epochs)]
+_all_seeds = [[int(rng_b.integers(0, 2**63 - 1)) for _ in range(n_batches)]
+              for _ in range(args.epochs)]
+pf = _Prefetcher(_all_orders, _all_seeds)
 pf.start()
 for epoch in range(1, args.epochs + 1):
     prog.epoch_start()
-    if epoch > 1:
-        order = rng_b.permutation(epoch_units)
-        pf.order = order
+    pf.epoch = epoch - 1   # next() drops entries from earlier epochs
     agg = dict(norm=0., fail=0., n=0)
     for bi in range(n_batches):
         got = pf.next()

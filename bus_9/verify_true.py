@@ -68,6 +68,10 @@ ap.add_argument('--instants-file', default=None,
                      '<out>/instants.json (shared scenarios); '
                      'requires matching --n and --split.')
 ap.add_argument('--seed', type=int, default=11)
+ap.add_argument('--cuda_graph', action='store_true',
+                help='Capture the 1600-step true-dynamics RK4 loop into a CUDA '
+                     'graph and replay it per batch (launch-bound otherwise). '
+                     'Partial batches fall back to eager.')
 args = ap.parse_args()
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -232,25 +236,42 @@ def full_sim(ks, tk_arr, dP=None, hold='clear', vt=None):
                   by --horizon and so cuts the correction mid-fault whenever
                   the fault outlasts the horizon
       'run'    -> never
+
+    With --cuda_graph, the ~1600-step RK4 loop is captured once and replayed:
+    it is launch-bound (~10k tiny kernels for the two full_sim calls per
+    batch) and the body is pure device ops with static shapes. Per-batch
+    variation (fault timelines, set-point offsets, dP) enters through static
+    input buffers written with copy_() per batch. Partial batches run eager.
     """
     n = len(ks)
     Yf, dPm = true_network(ks)
-    Ypre = S.Yred_pre.expand(n, 3, 3)
-    Mp, Np = S.pe_consts(Ypre); Mf, Nf = S.pe_consts(Yf)
+    h = args.dt_true
+    n_steps = int(round(float(t_grid[-1]) / h))
+    tk_t = torch.tensor(np.asarray(tk_arr), dtype=torch.float32, device=device)
+    if hold == 'clear':
+        t_off = torch.tensor(t_clear[ks], dtype=torch.float32, device=device)
+    elif hold == 'run':
+        t_off = torch.full_like(tk_t, float(t_grid[-1]) + 1.0)
+    else:
+        t_off = tk_t + torch.tensor(np.asarray(vt), dtype=torch.float32,
+                                    device=device)
     tf = torch.tensor(t_fault[ks], dtype=torch.float32, device=device)
     tc = torch.tensor(t_clear[ks], dtype=torch.float32, device=device)
-    tk = torch.tensor(np.asarray(tk_arr), dtype=torch.float32, device=device)
-    if hold == 'clear':
-        t_off = tc
-    elif hold == 'run':
-        t_off = torch.full_like(tk, float(t_grid[-1]) + 1.0)
-    else:
-        t_off = tk + torch.tensor(np.asarray(vt), dtype=torch.float32,
-                                  device=device)
+    dP_t = dP if dP is not None else torch.zeros(n, 3, device=device)
+
+    if args.cuda_graph and n == args.batch:
+        return _full_sim_cap(tf, tc, tk_t, t_off, Yf, dPm, dP_t)
+    return _full_sim_ref(n_steps, tf, tc, tk_t, t_off, Yf, dPm, dP_t)
+
+
+def _full_sim_ref(n_steps, tf, tc, tk, t_off, Yf, dPm, dP):
+    """Eager reference path (partial batches, and the non-graph default)."""
+    n = tf.shape[0]
+    Ypre = S.Yred_pre.expand(n, 3, 3)
+    Mp, Np = S.pe_consts(Ypre); Mf, Nf = S.pe_consts(Yf)
     x = torch.cat([S.delta0, torch.ones(3, device=device), S.Pm0]) \
         .unsqueeze(0).expand(n, 9).clone()
     h = args.dt_true
-    n_steps = int(round(float(t_grid[-1]) / h))
     traj = torch.zeros(n, n_steps + 1, 3, device=device)
     states = torch.zeros(n, n_steps + 1, 9, device=device)
     traj[:, 0] = x[:, 3:6]; states[:, 0] = x
@@ -260,12 +281,105 @@ def full_sim(ks, tk_arr, dP=None, hold='clear', vt=None):
         M = torch.where(act.view(n, 1, 1), Mf, Mp)
         N = torch.where(act.view(n, 1, 1), Nf, Np)
         Ps = S.Pm0.unsqueeze(0) + dPm * act.view(n, 1).float()
-        if dP is not None:
-            on = (tm >= tk) & (tm < t_off)
-            Ps = Ps + dP * on.view(n, 1).float()
+        on = (tm >= tk) & (tm < t_off)
+        Ps = Ps + dP * on.view(n, 1).float()
         x = S.rk4_real(x, M, N, Ps, h)
         traj[:, i + 1] = x[:, 3:6]; states[:, i + 1] = x
     return traj, states
+
+
+# ── captured full_sim: one graph, replayed per batch ─────────────────────────
+_sim_graph = None
+_sim_buf = None
+_sim_err = None
+
+
+def _full_sim_cap(tf, tc, tk, t_off, Yf, dPm, dP):
+    """Copy the batch into the static buffers, replay the captured loop."""
+    global _sim_graph, _sim_buf
+    b = _sim_buf
+    b['tf'].copy_(tf); b['tc'].copy_(tc)
+    b['tk'].copy_(tk); b['t_off'].copy_(t_off)
+    Mf_c, Nf_c = S.pe_consts(Yf)
+    b['Mf'].copy_(Mf_c); b['Nf'].copy_(Nf_c)
+    Mp_c, Np_c = S.pe_consts(S.Yred_pre.expand(tf.shape[0], 3, 3))
+    b['Mp'].copy_(Mp_c); b['Np'].copy_(Np_c)
+    b['dPm'].copy_(dPm); b['dP'].copy_(dP)
+    _sim_graph.replay()
+    # clone out: the static outputs are rewritten by the next replay
+    return b['traj'].clone(), b['states'].clone()
+
+
+def _capture_sim(n_steps, n):
+    """Warm up + capture the full_sim loop on an enlarged-stack worker thread
+    (~10k tiny kernel nodes overflow the 8 MB main-thread stack on Windows
+    Python, as in refine_dp)."""
+    global _sim_graph, _sim_buf
+    _sim_buf = b = dict(
+        x=torch.cat([S.delta0, torch.ones(3, device=device), S.Pm0])
+        .unsqueeze(0).expand(n, 9).clone(),
+        tf=torch.zeros(n, device=device), tc=torch.zeros(n, device=device),
+        tk=torch.full((n,), float(t_grid[-1]), device=device),
+        t_off=torch.full((n,), float(t_grid[-1]) + 1.0, device=device),
+        Mf=torch.zeros(n, 3, 3, dtype=S.cdtype, device=device),
+        Nf=torch.zeros(n, 3, 3, dtype=S.cdtype, device=device),
+        Mp=torch.zeros(n, 3, 3, dtype=S.cdtype, device=device),
+        Np=torch.zeros(n, 3, 3, dtype=S.cdtype, device=device),
+        dPm=torch.zeros(n, 3, device=device),
+        dP=torch.zeros(n, 3, device=device),
+        traj=torch.zeros(n, n_steps + 1, 3, device=device),
+        states=torch.zeros(n, n_steps + 1, 9, device=device),
+    )
+
+    def _body():
+        x = b['x']; traj = b['traj']; states = b['states']
+        traj[:, 0] = x[:, 3:6]; states[:, 0] = x
+        tf, tc, tk, t_off = b['tf'], b['tc'], b['tk'], b['t_off']
+        Mf, Nf, Mp, Np = b['Mf'], b['Nf'], b['Mp'], b['Np']
+        dP, dPm = b['dP'], b['dPm']
+        h = args.dt_true
+        for i in range(n_steps):
+            tm = i * h + h / 2
+            act = (tm >= tf) & (tm < tc)
+            M = torch.where(act.view(n, 1, 1), Mf, Mp)
+            N = torch.where(act.view(n, 1, 1), Nf, Np)
+            Ps = S.Pm0.unsqueeze(0) + dPm * act.view(n, 1).float()
+            on = (tm >= tk) & (tm < t_off)
+            Ps = Ps + dP * on.view(n, 1).float()
+            x = S.rk4_real(x, M, N, Ps, h)
+            traj[:, i + 1] = x[:, 3:6]; states[:, i + 1] = x
+
+    import threading as _threading
+    for _sz in (64, 32, 16):          # 256MB is rejected by Windows python
+        try:
+            _threading.stack_size(_sz * 1024 * 1024)
+            break
+        except ValueError:
+            continue
+    global _sim_err
+    _sim_err = None
+
+    def _worker():
+        global _sim_err, _sim_graph
+        try:
+            s = torch.cuda.Stream()
+            s.wait_stream(torch.cuda.current_stream())
+            with torch.cuda.stream(s):
+                for _ in range(3):
+                    _body()                     # warmup: allocates + handles
+            torch.cuda.current_stream().wait_stream(s)
+            g = torch.cuda.CUDAGraph()
+            with torch.cuda.graph(g):
+                _body()
+            _sim_graph = g
+        except Exception as e:                  # eager fallback
+            _sim_err = e
+
+    th = _threading.Thread(target=_worker)
+    th.start(); th.join()
+    if _sim_err is not None:
+        print(f"  (--cuda_graph capture failed: {_sim_err!r}; running eager)")
+        args.cuda_graph = False
 
 
 @torch.no_grad()
@@ -322,6 +436,13 @@ def true_rollout(x0, Yf, dPm, dP, valid_t, active, record=False):
 
 
 # ── run ──────────────────────────────────────────────────────────────────────
+if args.cuda_graph:
+    _n_steps = int(round(float(t_grid[-1]) / args.dt_true))
+    _capture_sim(_n_steps, args.batch)
+    print(f"CUDA graph: {_n_steps} RK4 steps/batch captured"
+          if _sim_graph is not None else
+          f"CUDA graph: capture failed "
+          f"({_sim_err or 'worker incomplete'})")
 rng = np.random.default_rng(args.seed)
 tot = dict(n=0, need=0, resc_true=0, resc_model=0, ok_true=0, ok_n=0,
            agree=0, norm=0.0, resc_run=0, free_run=0, excluded=0)
@@ -338,6 +459,9 @@ while n_done < args.n:
             print(f"instants loaded: {len(_KS)} from {args.instants_file}")
         ks = _KS[n_done:n_done + bs]
         feat, x_meas, fut, vmask, ks, tk, valid_t = make_batch(ks, rng, tk_fixed=_TK[n_done:n_done + bs])
+    else:
+        feat, x_meas, fut, vmask, ks, tk, valid_t = make_batch(
+            rng.choice(idx_va, bs, replace=False), rng)
     feat, x_meas = feat.to(device), x_meas.to(device)
     fut, vmask = fut.to(device), vmask.to(device)
 

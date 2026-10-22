@@ -66,6 +66,10 @@ ap.add_argument('--instants-file', default=None,
                      '<out>/instants.json (shared scenarios); '
                      'requires matching --n and --split.')
 ap.add_argument('--seed', type=int, default=11)
+ap.add_argument('--cuda_graph', action='store_true',
+                help='Capture the true-dynamics RK4 loop into a CUDA graph and '
+                     'replay it per batch (launch-bound otherwise). Partial '
+                     'batches fall back to eager.')
 args = ap.parse_args()
 
 su = Setup(args.ckpt, args.data, args.base, args.sys)
@@ -84,6 +88,26 @@ print(f"Split '{args.split}': {len(idx)} scenarios  "
 
 
 # ── true dynamics ────────────────────────────────────────────────────────────
+def _fs30_body(n, b, n_steps):
+    """Shared RK4 full-run loop over buffers (used by both eager and graph)."""
+    x = b['x']; traj = b['traj']; states = b['states']
+    traj[:, 0] = x[:, NG:2 * NG]; states[:, 0] = x
+    tf, tc, tk, t_off = b['tf'], b['tc'], b['tk'], b['t_off']
+    Mf, Nf, Mp, Np = b['Mf'], b['Nf'], b['Mp'], b['Np']
+    dP, dPm = b['dP'], b['dPm']
+    h = args.dt_true
+    for i in range(n_steps):
+        tm = i * h + h / 2
+        act = (tm >= tf) & (tm < tc)
+        M = torch.where(act.view(n, 1, 1), Mf, Mp)
+        N = torch.where(act.view(n, 1, 1), Nf, Np)
+        Ps = S.Pm0.unsqueeze(0) + dPm * act.view(n, 1).float()
+        on = (tm >= tk) & (tm < t_off)
+        Ps = Ps + dP * on.view(n, 1).float()
+        x = S.rk4_real(x, M, N, Ps, h)
+        traj[:, i + 1] = x[:, NG:2 * NG]; states[:, i + 1] = x
+
+
 @torch.no_grad()
 def full_sim(ks, tk_arr, dP=None, hold='clear', vt=None):
     """
@@ -91,11 +115,15 @@ def full_sim(ks, tk_arr, dP=None, hold='clear', vt=None):
     pre-fault -> faulted on [t_fault, t_clear) -> pre-fault again.
     dP (B, 2) is applied from the decision instant until `hold` removes it.
     Returns omega (B, T, 6) and the full state (B, T, 18).
+
+    With --cuda_graph the RK4 loop is captured once and replayed per batch:
+    it is launch-bound (thousands of tiny kernels) and the body is pure device
+    ops with static shapes; per-batch variation (fault timelines, set-point
+    offsets, dP) enters through static input buffers via copy_(). Partial
+    batches run eager through the same shared body.
     """
     n = len(ks)
     Yf, dPm = su.true_network(ks)
-    Mp, Np = S.pe_consts(S.Yred_pre.expand(n, NG, NG))
-    Mf, Nf = S.pe_consts(Yf)
     tf = torch.tensor(t_fault[ks], dtype=torch.float32, device=device)
     tc = torch.tensor(t_clear[ks], dtype=torch.float32, device=device)
     tk = torch.tensor(np.asarray(tk_arr), dtype=torch.float32, device=device)
@@ -106,24 +134,97 @@ def full_sim(ks, tk_arr, dP=None, hold='clear', vt=None):
     else:
         t_off = tk + torch.tensor(np.asarray(vt), dtype=torch.float32, device=device)
     dP6 = model.scatter_dp(dP) if dP is not None else None
-    x = S.x0.to(torch.float32).unsqueeze(0).expand(n, N_STATE).clone()
-    h = args.dt_true
-    n_steps = int(round(float(t_grid[-1]) / h))
-    traj = torch.zeros(n, n_steps + 1, NG, device=device)
-    states = torch.zeros(n, n_steps + 1, N_STATE, device=device)
-    traj[:, 0] = x[:, NG:2 * NG]; states[:, 0] = x
-    for i in range(n_steps):
-        tm = i * h + h / 2
-        act = (tm >= tf) & (tm < tc)
-        M = torch.where(act.view(n, 1, 1), Mf, Mp)
-        N = torch.where(act.view(n, 1, 1), Nf, Np)
-        Ps = S.Pm0.unsqueeze(0) + dPm * act.view(n, 1).float()
-        if dP6 is not None:
-            on = (tm >= tk) & (tm < t_off)
-            Ps = Ps + dP6 * on.view(n, 1).float()
-        x = S.rk4_real(x, M, N, Ps, h)
-        traj[:, i + 1] = x[:, NG:2 * NG]; states[:, i + 1] = x
-    return traj, states
+    n_steps = int(round(float(t_grid[-1]) / args.dt_true))
+
+    if args.cuda_graph and n == args.batch:
+        return _full_sim_cap(tf, tc, tk, t_off, Yf, dPm, dP6)
+    # eager: build one-shot buffers, run the shared body
+    b = dict(
+        x=S.x0.to(torch.float32).unsqueeze(0).expand(n, N_STATE).clone(),
+        tf=tf, tc=tc, tk=tk, t_off=t_off,
+        dPm=dPm,
+        dP=dP6 if dP6 is not None else torch.zeros(n, NG, device=device),
+        traj=torch.zeros(n, n_steps + 1, NG, device=device),
+        states=torch.zeros(n, n_steps + 1, N_STATE, device=device),
+    )
+    Mp, Np = S.pe_consts(S.Yred_pre.expand(n, NG, NG))
+    b['Mf'], b['Nf'] = S.pe_consts(Yf); b['Mp'], b['Np'] = Mp, Np
+    _fs30_body(n, b, n_steps)
+    return b['traj'], b['states']
+
+
+# ── captured full_sim: one graph, replayed per batch ─────────────────────────
+_sim_graph = None
+_sim_buf = None
+
+
+def _full_sim_cap(tf, tc, tk, t_off, Yf, dPm, dP6):
+    """Copy the batch into the static buffers, replay the captured loop."""
+    global _sim_graph, _sim_buf
+    b = _sim_buf
+    b['tf'].copy_(tf); b['tc'].copy_(tc)
+    b['tk'].copy_(tk); b['t_off'].copy_(t_off)
+    Mf_c, Nf_c = S.pe_consts(Yf)
+    b['Mf'].copy_(Mf_c); b['Nf'].copy_(Nf_c)
+    Mp_c, Np_c = S.pe_consts(S.Yred_pre.expand(tf.shape[0], NG, NG))
+    b['Mp'].copy_(Mp_c); b['Np'].copy_(Np_c)
+    b['dPm'].copy_(dPm)
+    b['dP'].copy_(dP6 if dP6 is not None
+                  else torch.zeros(tf.shape[0], NG, device=device))
+    _sim_graph.replay()
+    # clone out: the static outputs are rewritten by the next replay
+    return b['traj'].clone(), b['states'].clone()
+
+
+def _capture_sim(n_steps, n):
+    """Warm up + capture on an enlarged-stack worker thread (Windows Python
+    overflows the 8 MB main-thread stack capturing thousands of tiny kernel
+    nodes, as in refine_dp)."""
+    global _sim_graph, _sim_buf
+    _sim_buf = b = dict(
+        x=S.x0.to(torch.float32).unsqueeze(0).expand(n, N_STATE).clone(),
+        tf=torch.zeros(n, device=device), tc=torch.zeros(n, device=device),
+        tk=torch.full((n,), float(t_grid[-1]), device=device),
+        t_off=torch.full((n,), float(t_grid[-1]) + 1.0, device=device),
+        Mf=torch.zeros(n, NG, NG, dtype=S.cdtype, device=device),
+        Nf=torch.zeros(n, NG, NG, dtype=S.cdtype, device=device),
+        Mp=torch.zeros(n, NG, NG, dtype=S.cdtype, device=device),
+        Np=torch.zeros(n, NG, NG, dtype=S.cdtype, device=device),
+        dPm=torch.zeros(n, NG, device=device),
+        dP=torch.zeros(n, NG, device=device),
+        traj=torch.zeros(n, n_steps + 1, NG, device=device),
+        states=torch.zeros(n, n_steps + 1, N_STATE, device=device),
+    )
+
+    def _worker():
+        global _sim_graph
+        try:
+            s = torch.cuda.Stream()
+            s.wait_stream(torch.cuda.current_stream())
+            with torch.cuda.stream(s):
+                for _ in range(3):
+                    _fs30_body(n, b, n_steps)   # warmup: allocates + handles
+            torch.cuda.current_stream().wait_stream(s)
+            g = torch.cuda.CUDAGraph()
+            with torch.cuda.graph(g):
+                _fs30_body(n, b, n_steps)
+            _sim_graph = g
+        except Exception as e:                  # eager fallback
+            print(f"  (--cuda_graph capture failed: {e!r}; running eager)")
+            args.cuda_graph = False
+
+    import threading as _threading
+    for _sz in (64, 32, 16):          # 256MB is rejected by Windows python
+        try:
+            _threading.stack_size(_sz * 1024 * 1024)
+            break
+        except ValueError:
+            continue
+    th = _threading.Thread(target=_worker)
+    th.start(); th.join()
+
+
+
 
 
 @torch.no_grad()
@@ -142,6 +243,11 @@ def peaks_from(traj, tk, valid_t):
 
 
 # ── run ──────────────────────────────────────────────────────────────────────
+if args.cuda_graph:
+    _n_steps = int(round(float(t_grid[-1]) / args.dt_true))
+    _capture_sim(_n_steps, args.batch)
+    print(f"CUDA graph: {_n_steps} RK4 steps/batch captured"
+          if _sim_graph is not None else "CUDA graph: capture failed, eager")
 rng = np.random.default_rng(args.seed)
 tot = dict(n=0, need=0, resc_true=0, resc_model=0, ok_true=0, ok_n=0, agree=0,
            resc_run=0, free_run=0, excluded=0, healthy=0, harmed=0)
@@ -168,6 +274,8 @@ while n_done < args.n:
             _KS = np.asarray(_inst['ks'], dtype=int); _TK = np.asarray(_inst['tk'], dtype=float)
             print(f"instants loaded: {len(_KS)} from {args.instants_file}")
         b = su.to_dev(su.make_batch(_KS[n_done:n_done + bs], rng, tk_fixed=_TK[n_done:n_done + bs]))
+    else:
+        b = su.to_dev(su.make_batch(rng.choice(idx, bs, replace=False), rng))
     ks, tk, valid_t = b['ks'], b['tk'], b['valid_t']
     with torch.no_grad():
         o = model(b['feat'], b['x_meas'], hard=True, ctrl=True, vmask=b['vmask'])
