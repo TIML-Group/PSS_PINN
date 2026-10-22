@@ -827,7 +827,7 @@ if not args.no_plot:
                ('Rescue rate TRUE ↓' if N_TRUE else 'model-internal rescue'), None),
               ('dP_norm', '‖ΔP‖ [pu] ↓', None),
               ('window', 'Learned window [ms]', None)]
-    fig, axs = plt.subplots(3, 2, figsize=(3.5, 4.5))
+    fig, axs = plt.subplots(2, 3, figsize=(3.5, 3.0))
     x = np.arange(len(models))
     for ax, (k, title, _) in zip(axs.ravel(), panels):
         if k == 'window':
@@ -851,7 +851,7 @@ if not args.no_plot:
             ylo = max(0.0, bot - 1.2 * span); ax.set_ylim(ylo, min(1.0, top + 0.8 * span) + 1e-9)
             if ylo > 0:
                 ax.text(0.99, 0.03, f'y≥{ylo:.2f}', transform=ax.transAxes,
-                        fontsize=5.0, color=INK2, va='bottom', ha='right')
+                        fontsize=3.6, color=INK2, va='bottom', ha='right')
         else:
             ax.set_ylim(0, top * 1.25 if top > 0 else 1.0)
         ytop = vals + (err[1] if err is not None else 0)
@@ -862,13 +862,13 @@ if not args.no_plot:
         for xi, v, yt in zip(x, vals, ytop):
             lab = (f"{v:.0f}" if k == 'window'
                    else f"{v:.4f}" if zoomed else f"{v:.3f}")
-            ax.text(xi, yt, lab, ha='center', va='bottom', fontsize=6.0, color=INK,
+            ax.text(xi, yt, lab, ha='center', va='bottom', fontsize=4.3, color=INK,
                     zorder=4, bbox=dict(boxstyle='square,pad=0.15', fc='white', ec='none'))
-        ax.set_title(title, fontsize=7.8, color=INK, loc='left')
-        ax.set_xticks(x, [m.label for m in models], fontsize=5.8, color=INK,
-                  rotation=0)
+        ax.set_title(title, fontsize=5.6, color=INK, loc='left')
+        ax.set_xticks(x, [m.label for m in models], fontsize=4.2, color=INK,
+                  rotation=25)
         ax.tick_params(axis='x', pad=1.2)
-        ax.tick_params(axis='y', labelsize=6.2, colors=INK2)
+        ax.tick_params(axis='y', labelsize=4.5, colors=INK2)
         ax.grid(axis='y', color=GRID, lw=0.6, zorder=0)
         for sp in ('top', 'right'):
             ax.spines[sp].set_visible(False)
@@ -893,22 +893,22 @@ if not args.no_plot:
                              mfc=(BIAS if nz else 'white'), mec=BIAS, mew=1.6,
                              ecolor=BIAS, elinewidth=0.79, capsize=3.0, zorder=5)
                 ax2.annotate(f"{v:+.3f}", (xi, v), textcoords='offset points',
-                             xytext=(6, -2), fontsize=5.4, color=BIAS, zorder=6,
+                             xytext=(6, -2), fontsize=3.9, color=BIAS, zorder=6,
                              bbox=dict(boxstyle='square,pad=0.12', fc='white',
                                        ec='none', alpha=0.85))
             pass  # diamond legend -> paper caption
-            ax2.set_ylabel('signed \u03b1 bias', fontsize=6.2, color=BIAS)
-            ax2.tick_params(axis='y', labelsize=6.2, colors=BIAS)
+            ax2.set_ylabel('signed α bias', fontsize=4.5, color=BIAS, rotation=90, labelpad=1)
+            ax2.tick_params(axis='y', labelsize=4.5, colors=BIAS)
             ax2.spines['top'].set_visible(False)
             ax2.spines['left'].set_visible(False)
             ax2.spines['right'].set_color(BIAS)
     fig.suptitle(f"{SYSTEM}-bus: encoder + ΔP cell ablation\n"
                  f"({args.split}, {args.n} instants, {len(uniq)} scenarios; "
-                 f"95% cluster-bootstrap CI)", fontsize=7.2, color=INK,
+                 f"95% cluster-bootstrap CI)", fontsize=5.2, color=INK,
                  x=0.02, ha='left', va='top', linespacing=1.35)
     fig.tight_layout(rect=(0, 0, 1, 0.90), h_pad=0.9, w_pad=0.9)
     p = os.path.join(args.out, 'compare')
-    save_fig(fig, p, dpi=300)
+    save_fig(fig, p, dpi=300, bbox='tight')
     plt.close(fig)
     print(f"-> {p}")
 # ── trajectory figures: one generator, whole run, every architecture ────────
