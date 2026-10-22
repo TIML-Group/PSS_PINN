@@ -821,13 +821,13 @@ if not args.no_plot:
     INK, INK2, GRID = '#2c2c2a', '#6b6a64', '#e4e3dd'
     BIAS = '#7b2d8e'          # overlay colour: off the bar palette on purpose
     panels = [('decision_acc', 'Decision accuracy', None),
-              ('alpha_rmse', 'Severity (α) RMSE  — lower is better', None),
+              ('alpha_rmse', 'Severity (α) RMSE ↓', None),
               ('ool_tpr', 'OOL detection rate (TPR)', None),
               (('rescue_true' if N_TRUE else 'rescue_model'),
-               'Rescue rate, ' + ('TRUE dynamics' if N_TRUE else 'model rollout'), None),
-              ('dP_norm', '‖ΔP‖ [pu]  — lower is better', None),
+               ('Rescue rate TRUE ↓' if N_TRUE else 'model-internal rescue'), None),
+              ('dP_norm', '‖ΔP‖ [pu] ↓', None),
               ('window', 'Learned window [ms]', None)]
-    fig, axs = plt.subplots(2, 3, figsize=(12, 6.6))
+    fig, axs = plt.subplots(3, 2, figsize=(3.5, 4.5))
     x = np.arange(len(models))
     for ax, (k, title, _) in zip(axs.ravel(), panels):
         if k == 'window':
@@ -837,10 +837,10 @@ if not args.no_plot:
             cis = np.array([ci(m.boot[k]) for m in models])
             err = np.vstack([vals - cis[:, 0], cis[:, 1] - vals])
         ax.bar(x, vals, width=0.62, color=COL[:len(models)], edgecolor='white',
-               linewidth=2, zorder=2)
+               linewidth=1.5, zorder=2)
         if err is not None:
-            ax.errorbar(x, vals, yerr=err, fmt='none', ecolor=INK, elinewidth=1.2,
-                        capsize=4, zorder=3)
+            ax.errorbar(x, vals, yerr=err, fmt='none', ecolor=INK, elinewidth=0.68,
+                        capsize=3.0, zorder=3)
         top = (vals + (err[1] if err is not None else 0)).max()
         bot = (vals - (err[0] if err is not None else 0)).min()
         # zoom on rates near 1 so differences are visible; say so on the axis
@@ -850,8 +850,8 @@ if not args.no_plot:
             span = max(top - bot, 0.01)
             ylo = max(0.0, bot - 1.2 * span); ax.set_ylim(ylo, min(1.0, top + 0.8 * span) + 1e-9)
             if ylo > 0:
-                ax.text(0.01, 0.98, f'axis starts at {ylo:.2f}', transform=ax.transAxes,
-                        fontsize=7.5, color=INK2, va='top')
+                ax.text(0.99, 0.03, f'y≥{ylo:.2f}', transform=ax.transAxes,
+                        fontsize=5.0, color=INK2, va='bottom', ha='right')
         else:
             ax.set_ylim(0, top * 1.25 if top > 0 else 1.0)
         ytop = vals + (err[1] if err is not None else 0)
@@ -862,12 +862,14 @@ if not args.no_plot:
         for xi, v, yt in zip(x, vals, ytop):
             lab = (f"{v:.0f}" if k == 'window'
                    else f"{v:.4f}" if zoomed else f"{v:.3f}")
-            ax.text(xi, yt, lab, ha='center', va='bottom', fontsize=8.5, color=INK,
+            ax.text(xi, yt, lab, ha='center', va='bottom', fontsize=6.0, color=INK,
                     zorder=4, bbox=dict(boxstyle='square,pad=0.15', fc='white', ec='none'))
-        ax.set_title(title, fontsize=10, color=INK, loc='left')
-        ax.set_xticks(x, [m.label for m in models], fontsize=9, color=INK)
-        ax.tick_params(axis='y', labelsize=8, colors=INK2)
-        ax.grid(axis='y', color=GRID, lw=0.8, zorder=0)
+        ax.set_title(title, fontsize=7.8, color=INK, loc='left')
+        ax.set_xticks(x, [m.label for m in models], fontsize=5.8, color=INK,
+                  rotation=0)
+        ax.tick_params(axis='x', pad=1.2)
+        ax.tick_params(axis='y', labelsize=6.2, colors=INK2)
+        ax.grid(axis='y', color=GRID, lw=0.6, zorder=0)
         for sp in ('top', 'right'):
             ax.spines[sp].set_visible(False)
         for sp in ('left', 'bottom'):
@@ -884,31 +886,29 @@ if not args.no_plot:
             ax2 = ax.twinx()
             lim = max(float(np.nanmax(np.abs(np.r_[bc.ravel(), bv]))) * 2.0, 1e-3)
             ax2.set_ylim(-lim, lim)
-            ax2.axhline(0, color=BIAS, lw=0.9, ls=(0, (4, 3)), zorder=1, alpha=0.45)
+            ax2.axhline(0, color=BIAS, lw=0.68, ls=(0, (4, 3)), zorder=1, alpha=0.45)
             for xi, v, (clo, chi) in zip(x, bv, bc):
                 nz = np.isfinite(clo) and (clo > 0 or chi < 0)   # CI excludes zero
-                ax2.errorbar(xi, v, yerr=[[v - clo], [chi - v]], fmt='D', ms=7,
+                ax2.errorbar(xi, v, yerr=[[v - clo], [chi - v]], fmt='D', ms=5.2,
                              mfc=(BIAS if nz else 'white'), mec=BIAS, mew=1.6,
-                             ecolor=BIAS, elinewidth=1.4, capsize=4, zorder=5)
+                             ecolor=BIAS, elinewidth=0.79, capsize=3.0, zorder=5)
                 ax2.annotate(f"{v:+.3f}", (xi, v), textcoords='offset points',
-                             xytext=(13, -3), fontsize=8, color=BIAS, zorder=6,
+                             xytext=(6, -2), fontsize=5.4, color=BIAS, zorder=6,
                              bbox=dict(boxstyle='square,pad=0.12', fc='white',
                                        ec='none', alpha=0.85))
-            ax2.text(0.01, 0.97, '\u25c6 signed bias (pred \u2212 true), right axis\n'
-                                 '   filled = CI excludes 0',
-                     transform=ax2.transAxes, fontsize=7, color=BIAS, va='top',
-                     linespacing=1.4)
-            ax2.set_ylabel('signed \u03b1 bias', fontsize=8, color=BIAS)
-            ax2.tick_params(axis='y', labelsize=8, colors=BIAS)
+            pass  # diamond legend -> paper caption
+            ax2.set_ylabel('signed \u03b1 bias', fontsize=6.2, color=BIAS)
+            ax2.tick_params(axis='y', labelsize=6.2, colors=BIAS)
             ax2.spines['top'].set_visible(False)
             ax2.spines['left'].set_visible(False)
             ax2.spines['right'].set_color(BIAS)
-    fig.suptitle(f"{SYSTEM}-bus: encoder + ΔP cell ablation  ({args.split}, "
-                 f"{args.n} instants, {len(uniq)} scenarios; bars = 95% "
-                 f"cluster-bootstrap CI)", fontsize=11, color=INK, x=0.01, ha='left')
-    fig.tight_layout(rect=(0, 0, 1, 0.95))
+    fig.suptitle(f"{SYSTEM}-bus: encoder + ΔP cell ablation\n"
+                 f"({args.split}, {args.n} instants, {len(uniq)} scenarios; "
+                 f"95% cluster-bootstrap CI)", fontsize=7.2, color=INK,
+                 x=0.02, ha='left', va='top', linespacing=1.35)
+    fig.tight_layout(rect=(0, 0, 1, 0.90), h_pad=0.9, w_pad=0.9)
     p = os.path.join(args.out, 'compare')
-    save_fig(fig, p, dpi=150)
+    save_fig(fig, p, dpi=600)
     plt.close(fig)
     print(f"-> {p}")
 # ── trajectory figures: one generator, whole run, every architecture ────────
@@ -1000,58 +1000,59 @@ if not args.no_plot and args.plots_per_type > 0:
                  else int(np.abs(tr_free[after] - 1).max(0).argmax()))
             g = min(max(g, 0), NG - 1)
 
-            fig, ax = plt.subplots(figsize=(12, 5.2))
+            fig, ax = plt.subplots(figsize=(3.5, 2.6))
             ax.axvspan(SYS.t_fault[k], SYS.t_clear[k], color='#f3ead2', zorder=0)
             for sgn in (+1, -1):
-                ax.axhline(1 + sgn * LIMIT, color=INK, lw=1.0, ls=':', zorder=1)
-            ax.axvline(tkj, color=INK2, lw=1.0, zorder=1)
-            ax.plot(tt, tr_free[:, g], color='#2c2c2a', lw=1.4, ls='--', zorder=20)
-            handles = [Line2D([], [], color='#2c2c2a', lw=1.4, ls='--',
+                ax.axhline(1 + sgn * LIMIT, color=INK, lw=0.75, ls=':', zorder=1)
+            ax.axvline(tkj, color=INK2, lw=0.75, zorder=1)
+            ax.plot(tt, tr_free[:, g], color='#2c2c2a', lw=1.05, ls='--', zorder=20)
+            handles = [Line2D([], [], color='#2c2c2a', lw=1.05, ls='--',
                               label=f"no ΔP   (peak |ω−1| {float(pfr[0]):.4f})")]
             log = dict(scenario=k, type=tname, t_decision=tkj, generator=g + 1,
                        needed_rescue=needed_j, peak_free_run=float(pfr[0]), models={})
             for mi, (m, r) in enumerate(zip(models, runs)):
-                ax.plot(tt, r['tr'][:, g], color=COL[mi], lw=2.0, zorder=3 + mi)
+                ax.plot(tt, r['tr'][:, g], color=COL[mi], lw=1.5, zorder=3 + mi)
                 st = ('inside all run' if r['pk_run'] <= LIMIT else
                       'inside judged window only' if r['pk_win'] <= LIMIT else
                       'leaves envelope')
                 dps = ", ".join(f"{v:+.3f}" for v in r['dP'])
-                handles.append(Line2D([], [], color=COL[mi], lw=2.0,
-                    label=f"{m.label}   ΔP [{dps}] pu   peak {r['pk_run']:.4f}   {st}"))
+                handles.append(Line2D([], [], color=COL[mi], lw=1.5,
+                    label=f"{m.label}  peak {r['pk_run']:.4f}  {st}"))
                 log['models'][m.label] = dict(dP=[float(v) for v in r['dP']],
                                               peak_run=r['pk_run'],
                                               peak_window=r['pk_win'], status=st)
-            handles += [Line2D([], [], color=INK, lw=1.0, ls=':',
+            handles += [Line2D([], [], color=INK, lw=0.75, ls=':',
                                label=f'envelope ±{LIMIT:g}'),
                         plt.Rectangle((0, 0), 1, 1, color='#f3ead2', label='fault active'),
-                        Line2D([], [], color=INK2, lw=1.0, label='decision instant')]
+                        Line2D([], [], color=INK2, lw=0.75, label='decision instant')]
             allv = np.concatenate([tr_free[:, g]] + [r['tr'][:, g] for r in runs])
             pad = max(1.6 * LIMIT, 1.08 * np.abs(allv - 1).max())
             ax.set_ylim(1 - pad, 1 + pad)
             ax.set_xlim(0, float(tt[-1]))
             ax.set_xlabel('t [s]', color=INK); ax.set_ylabel(f'ω of G{g+1} [pu]', color=INK)
-            ax.tick_params(colors=INK2, labelsize=9)
-            ax.grid(color=GRID, lw=0.8, zorder=0)
+            ax.tick_params(colors=INK2, labelsize=5.8)
+            ax.grid(color=GRID, lw=0.6, zorder=0)
             for sp in ('top', 'right'):
                 ax.spines[sp].set_visible(False)
             for sp in ('left', 'bottom'):
                 ax.spines[sp].set_color(GRID)
-            ax.legend(handles=handles, fontsize=8.5, loc='upper center',
-                      bbox_to_anchor=(0.5, -0.13), ncol=1, frameon=False)
+            ax.legend(handles=handles, fontsize=5.6, loc='upper center',
+                      bbox_to_anchor=(0.5, -0.22), ncol=2, frameon=False,
+                      handlelength=1.6, columnspacing=1.2)
             ax.set_title(
                 f"{SYSTEM}-bus, {tname} fault, scenario {k}  (loc {SYS.meta_loc[k]}, "
                 f"α {SYS.meta_alpha[k]:.2f}, fault {SYS.t_fault[k]:.2f}–"
                 f"{SYS.t_clear[k]:.2f} s)   decision at {tkj:.2f} s "
                 f"(+{1000*(tkj-SYS.t_fault[k]):.0f} ms)\n"
-                f"G{g+1} shown" + ("" if args.plot_gen else " (largest uncontrolled swing)")
-                + "; peaks and status are over ALL machines, true dynamics;  ΔP order: "
+                f"G{g+1}" + ("" if args.plot_gen else " (largest uncontrolled swing)")
+                + "; true dynamics; ΔP order: "
                 + (", ".join(f"G{int(i)+1}" for i in SYS.act_idx.tolist())
                    if SYS.act_idx is not None else ", ".join(f"G{i+1}" for i in range(NG)))
                 + ("" if needed_j else "   [this case did not need rescue]"),
-                fontsize=9.5, color=INK, loc='left')
+                fontsize=6.2, color=INK, loc='left')
             fig.tight_layout()
             p = os.path.join(tdir, f"{tname}_sc{k}_G{g+1}")
-            save_fig(fig, p, dpi=150, bbox='tight')
+            save_fig(fig, p, dpi=600, bbox='tight')
             plt.close(fig)
             log['file'] = p; traj_log.append(log)
             print(f"  {p}   " + "  ".join(

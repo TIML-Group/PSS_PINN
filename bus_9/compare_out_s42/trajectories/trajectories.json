@@ -31,6 +31,37 @@
   "file": "compare_out_s42\\trajectories\\gen_sc487_G1"
  },
  {
+  "scenario": 2799,
+  "type": "gen",
+  "t_decision": 1.206137807355635,
+  "generator": 1,
+  "needed_rescue": true,
+  "peak_free_run": 0.006485104560852051,
+  "models": {
+   "LSTM+LSTM": {
+    "dP": [
+     0.10876220464706421,
+     0.11927904933691025,
+     0.12358596920967102
+    ],
+    "peak_run": 0.0026660561561584473,
+    "peak_window": 0.0026660561561584473,
+    "status": "inside all run"
+   },
+   "MLP+MLP": {
+    "dP": [
+     0.10961692035198212,
+     0.1192876473069191,
+     0.11969985067844391
+    ],
+    "peak_run": 0.0027002692222595215,
+    "peak_window": 0.0027002692222595215,
+    "status": "inside all run"
+   }
+  },
+  "file": "compare_out_s42\\trajectories\\gen_sc2799_G1"
+ },
+ {
   "scenario": 5991,
   "type": "load",
   "t_decision": 3.72733902000992,
@@ -62,6 +93,37 @@
   "file": "compare_out_s42\\trajectories\\load_sc5991_G3"
  },
  {
+  "scenario": 4475,
+  "type": "load",
+  "t_decision": 1.4096036090431903,
+  "generator": 3,
+  "needed_rescue": true,
+  "peak_free_run": 0.011577725410461426,
+  "models": {
+   "LSTM+LSTM": {
+    "dP": [
+     0.34578737616539,
+     0.23220951855182648,
+     0.20656001567840576
+    ],
+    "peak_run": 0.0037793517112731934,
+    "peak_window": 0.0037793517112731934,
+    "status": "inside all run"
+   },
+   "MLP+MLP": {
+    "dP": [
+     0.4201647639274597,
+     0.23613932728767395,
+     0.22845558822155
+    ],
+    "peak_run": 0.0036350488662719727,
+    "peak_window": 0.0034186840057373047,
+    "status": "inside all run"
+   }
+  },
+  "file": "compare_out_s42\\trajectories\\load_sc4475_G3"
+ },
+ {
   "scenario": 8755,
   "type": "line",
   "t_decision": 3.5287073567335336,
@@ -91,5 +153,36 @@
    }
   },
   "file": "compare_out_s42\\trajectories\\line_sc8755_G2"
+ },
+ {
+  "scenario": 6958,
+  "type": "line",
+  "t_decision": 1.4506122864935547,
+  "generator": 3,
+  "needed_rescue": false,
+  "peak_free_run": 0.009081840515136719,
+  "models": {
+   "LSTM+LSTM": {
+    "dP": [
+     -0.09663290530443192,
+     -0.01673378236591816,
+     -0.17886057496070862
+    ],
+    "peak_run": 0.010440230369567871,
+    "peak_window": 0.003743290901184082,
+    "status": "inside judged window only"
+   },
+   "MLP+MLP": {
+    "dP": [
+     -0.1267712563276291,
+     0.022967172786593437,
+     -0.1335722804069519
+    ],
+    "peak_run": 0.009762883186340332,
+    "peak_window": 0.003960847854614258,
+    "status": "inside judged window only"
+   }
+  },
+  "file": "compare_out_s42\\trajectories\\line_sc6958_G3"
  }
 ]
