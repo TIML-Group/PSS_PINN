@@ -31,6 +31,7 @@ Plots a few random validation cases per fault type to <out>/plots/.
 
 import argparse, json, os
 
+import json
 import numpy as np
 import torch
 import matplotlib
@@ -62,6 +63,10 @@ ap.add_argument('--dp_hold', default='clear', choices=['clear', 'window', 'run']
 ap.add_argument('--plots_per_type', type=int, default=3)
 ap.add_argument('--split', default='val', choices=['val', 'test', 'train'],
                 help='Split to verify and plot from (default: validation).')
+ap.add_argument('--instants-file', default=None,
+                help='load the KS/TK draw from compare_models'
+                     '<out>/instants.json (shared scenarios); '
+                     'requires matching --n and --split.')
 ap.add_argument('--seed', type=int, default=11)
 args = ap.parse_args()
 
@@ -326,8 +331,13 @@ plot_pool = {0: [], 1: [], 2: []}
 n_done = 0
 while n_done < args.n:
     bs = min(args.batch, args.n - n_done)
-    ks = rng.choice(idx_va, bs)
-    feat, x_meas, fut, vmask, ks, tk, valid_t = make_batch(ks, rng)
+    if args.instants_file:
+        if n_done == 0:
+            _inst = json.load(open(args.instants_file))
+            _KS = np.asarray(_inst['ks'], dtype=int); _TK = np.asarray(_inst['tk'], dtype=float)
+            print(f"instants loaded: {len(_KS)} from {args.instants_file}")
+        ks = _KS[n_done:n_done + bs]
+        feat, x_meas, fut, vmask, ks, tk, valid_t = make_batch(ks, rng, tk_fixed=_TK[n_done:n_done + bs])
     feat, x_meas = feat.to(device), x_meas.to(device)
     fut, vmask = fut.to(device), vmask.to(device)
 

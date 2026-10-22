@@ -1,48 +1,48 @@
 {
  "n_instants": 2048,
- "n_need": 377,
- "rescue_true": 0.9787798408488063,
+ "n_need": 404,
+ "rescue_true": 0.9678217821782178,
  "rescue_model": 1.0,
- "agreement": 0.9787798408488063,
- "ok_true": 0.9905838041431262,
- "mean_dP": 0.12543759029358625,
+ "agreement": 0.9678217821782178,
+ "ok_true": 0.9867724867724867,
+ "mean_dP": 0.13316224329173565,
  "dp_hold": "clear",
- "excluded_no_active_fault": 23,
- "rescue_true_full_run": 0.9151193633952255,
+ "excluded_no_active_fault": 19,
+ "rescue_true_full_run": 0.8861386138613861,
  "no_dp_full_run": 0.0,
  "by_age": [
   {
    "lo": 0.0,
    "hi": 0.05,
-   "n": 73,
-   "true": 0.9178082191780822,
+   "n": 78,
+   "true": 0.8846153846153846,
    "model": 1.0
   },
   {
    "lo": 0.05,
    "hi": 0.1,
-   "n": 79,
+   "n": 95,
    "true": 1.0,
    "model": 1.0
   },
   {
    "lo": 0.1,
    "hi": 0.2,
-   "n": 154,
+   "n": 167,
    "true": 1.0,
    "model": 1.0
   },
   {
    "lo": 0.2,
    "hi": 0.5,
-   "n": 41,
-   "true": 0.9512195121951219,
+   "n": 43,
+   "true": 0.9069767441860465,
    "model": 1.0
   },
   {
    "lo": 0.5,
    "hi": 1000000000.0,
-   "n": 30,
+   "n": 21,
    "true": 1.0,
    "model": 1.0
   }

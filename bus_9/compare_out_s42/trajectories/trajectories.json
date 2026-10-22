@@ -1,0 +1,95 @@
+[
+ {
+  "scenario": 487,
+  "type": "gen",
+  "t_decision": 2.977288029789558,
+  "generator": 1,
+  "needed_rescue": true,
+  "peak_free_run": 0.015102505683898926,
+  "models": {
+   "LSTM+LSTM": {
+    "dP": [
+     0.41031739115715027,
+     0.48597314953804016,
+     0.374370813369751
+    ],
+    "peak_run": 0.003966212272644043,
+    "peak_window": 0.003966212272644043,
+    "status": "inside all run"
+   },
+   "MLP+MLP": {
+    "dP": [
+     0.3849254250526428,
+     0.6091116666793823,
+     0.36493173241615295
+    ],
+    "peak_run": 0.0034714937210083008,
+    "peak_window": 0.0034714937210083008,
+    "status": "inside all run"
+   }
+  },
+  "file": "compare_out_s42\\trajectories\\gen_sc487_G1"
+ },
+ {
+  "scenario": 5991,
+  "type": "load",
+  "t_decision": 3.72733902000992,
+  "generator": 3,
+  "needed_rescue": true,
+  "peak_free_run": 0.008300185203552246,
+  "models": {
+   "LSTM+LSTM": {
+    "dP": [
+     0.09806930273771286,
+     0.12405790388584137,
+     0.10582935065031052
+    ],
+    "peak_run": 0.0039196014404296875,
+    "peak_window": 0.0039196014404296875,
+    "status": "inside all run"
+   },
+   "MLP+MLP": {
+    "dP": [
+     0.18077115714550018,
+     0.1780603528022766,
+     0.1477954238653183
+    ],
+    "peak_run": 0.002467334270477295,
+    "peak_window": 0.002467334270477295,
+    "status": "inside all run"
+   }
+  },
+  "file": "compare_out_s42\\trajectories\\load_sc5991_G3"
+ },
+ {
+  "scenario": 8755,
+  "type": "line",
+  "t_decision": 3.5287073567335336,
+  "generator": 2,
+  "needed_rescue": false,
+  "peak_free_run": 0.00497889518737793,
+  "models": {
+   "LSTM+LSTM": {
+    "dP": [
+     -0.071709543466568,
+     -0.1511620134115219,
+     0.09438493102788925
+    ],
+    "peak_run": 0.003882169723510742,
+    "peak_window": 0.003882169723510742,
+    "status": "inside all run"
+   },
+   "MLP+MLP": {
+    "dP": [
+     -0.1520727425813675,
+     -0.15273194015026093,
+     0.1735653430223465
+    ],
+    "peak_run": 0.003961682319641113,
+    "peak_window": 0.003961682319641113,
+    "status": "inside all run"
+   }
+  },
+  "file": "compare_out_s42\\trajectories\\line_sc8755_G2"
+ }
+]

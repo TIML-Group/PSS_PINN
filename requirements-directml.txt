@@ -1,0 +1,26 @@
+# requirements-directml.txt — aarch64 (Windows-on-ARM) + any DX12 GPU via DirectML
+#
+# Package set derived from the script imports (33 .py files scanned): numpy,
+# scipy (scipy.io.loadmat), h5py (.mat v7.3), matplotlib, torch — nothing else.
+# No pandas/sklearn/tqdm/seaborn are imported anywhere in the repo.
+#
+# Windows 11 ARM, Python 3.11 (CPython aarch64). No AMD driver stack needed:
+# DirectML ships with Windows and exposes any DX12 GPU (including gfx1030-class
+# AMD cards and ARM iGPUs) through torch-directml.
+#
+# Version coupling matters: torch-directml has a fixed, narrow torch
+# compatibility window. Do NOT upgrade torch independently of torch-directml.
+#
+# Install from an ARM64 Python (NOT the x86 build — match the architecture):
+#   pip install -r requirements-directml.txt
+# Device selection in the scripts reads like CUDA; amend
+# train_*.py / case30_common.py to pick `torch_directml.device()` when porting
+# ("we will amend the sources later").
+
+numpy>=1.24,<2.0        # <2.0: np.float64 paths + h5py + torch-directml compat
+scipy>=1.12             # scipy.io.loadmat — dataset .mat reading
+h5py>=3.10              # .mat v7.3 files (MATLAB save())
+matplotlib>=3.8
+
+# the DirectML build of torch (installs torch + torch-directml as one unit)
+torch-directml>=0.2.5

@@ -1,0 +1,89 @@
+[
+ {
+  "scenario": 4864,
+  "type": "gen",
+  "t_decision": 2.640026106775135,
+  "generator": 2,
+  "needed_rescue": true,
+  "peak_free_run": 0.00531613826751709,
+  "models": {
+   "LSTM+LSTM": {
+    "dP": [
+     0.1683068871498108,
+     0.11257694661617279
+    ],
+    "peak_run": 0.0021639466285705566,
+    "peak_window": 0.0021639466285705566,
+    "status": "inside all run"
+   },
+   "MLP+MLP": {
+    "dP": [
+     0.10136355459690094,
+     0.11182723194360733
+    ],
+    "peak_run": 0.002897918224334717,
+    "peak_window": 0.002897918224334717,
+    "status": "inside all run"
+   }
+  },
+  "file": "compare_out_common_s42\\trajectories\\gen_sc4864_G2"
+ },
+ {
+  "scenario": 5991,
+  "type": "load",
+  "t_decision": 3.72733902000992,
+  "generator": 5,
+  "needed_rescue": true,
+  "peak_free_run": 0.008032381534576416,
+  "models": {
+   "LSTM+LSTM": {
+    "dP": [
+     0.1853000968694687,
+     0.16566959023475647
+    ],
+    "peak_run": 0.0029036998748779297,
+    "peak_window": 0.0029036998748779297,
+    "status": "inside all run"
+   },
+   "MLP+MLP": {
+    "dP": [
+     0.18916627764701843,
+     0.21010419726371765
+    ],
+    "peak_run": 0.002507030963897705,
+    "peak_window": 0.002507030963897705,
+    "status": "inside all run"
+   }
+  },
+  "file": "compare_out_common_s42\\trajectories\\load_sc5991_G5"
+ },
+ {
+  "scenario": 8755,
+  "type": "line",
+  "t_decision": 3.5287073567335336,
+  "generator": 5,
+  "needed_rescue": false,
+  "peak_free_run": 0.0004642009735107422,
+  "models": {
+   "LSTM+LSTM": {
+    "dP": [
+     -0.009153415448963642,
+     -0.0007975379121489823
+    ],
+    "peak_run": 0.0003325939178466797,
+    "peak_window": 0.0002665519714355469,
+    "status": "inside all run"
+   },
+   "MLP+MLP": {
+    "dP": [
+     0.0015455899992957711,
+     -0.0008451257017441094
+    ],
+    "peak_run": 0.00047206878662109375,
+    "peak_window": 0.00036537647247314453,
+    "status": "inside all run"
+   }
+  },
+  "file": "compare_out_common_s42\\trajectories\\line_sc8755_G5"
+ }
+]

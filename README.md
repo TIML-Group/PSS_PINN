@@ -13,7 +13,10 @@ Out-of-limit (OOL) prediction and ΔP are not learned labels. They are read off
 the physics rollout of the identified system, so every prediction the model
 makes can be checked against a simulation of the real grid.
 
-The same architecture is trained on two systems:
+The same pipeline is built twice — once with LSTMs, once with size-matched
+MLPs — as an ablation to test what recurrence actually buys.
+
+The architecture is trained on two systems:
 
 | | [`bus_9/`](bus_9) | [`bus_30/`](bus_30) |
 |---|---|---|
@@ -23,7 +26,7 @@ The same architecture is trained on two systems:
 | Fault hypotheses (incl. "no fault") | 13 | 57 |
 | Governed machines (ΔP width) | 3 | 2 (G1, G2) |
 | Hidden width / LSTM layers / trunk layers | 128 / 3 / 4 | 384 / 5 / 6 |
-| Parameters | 637,954 | 8,344,117 |
+| Parameters (LSTM+LSTM) | 637,954 | 8,344,117 |
 
 ---
 
@@ -35,6 +38,7 @@ The same architecture is trained on two systems:
 - [Data](#data)
 - [Running the 9-bus pipeline](#running-the-9-bus-pipeline)
 - [Running the 30-bus pipeline](#running-the-30-bus-pipeline)
+- [Ablation: LSTM vs size-matched MLP](#ablation-lstm-vs-size-matched-mlp)
 - [Evaluation protocol](#evaluation-protocol)
 - [Results](#results)
 - [Known issues and limitations](#known-issues-and-limitations)
@@ -47,13 +51,15 @@ The same architecture is trained on two systems:
 ```
 measured window (100 steps × 10 ms)
   → per-channel features (relative angles, ω, Pm, Id, Iq, Vm, relative θ)
+  → per-channel normalisation (train-set statistics stored in the checkpoint)
   → learnable soft time mask             (window length L is a trained parameter)
   → bias-free linear projection          (masked steps contribute exactly zero)
-  → residual LSTM stack with LayerNorm
+  → residual LSTM stack with LayerNorm   (or a matched MLP encoder — see ablation)
   → learnable softmax pooling over time → MLP trunk
   → heads: fault hypothesis · severity α · initial-state correction · ΔP
   → differentiable network build (Kron reduction of the faulted admittance matrix)
   → RK4 rollout of the swing + governor equations
+  → cascaded ΔP refinement (3 rounds, simulator in the loop)
   → OOL readout (peak |ω − 1| over the judged window) and ΔP evaluation
 ```
 
@@ -68,25 +74,33 @@ measured window (100 steps × 10 ms)
 Pe comes from the Kron-reduced network, built for each fault hypothesis. The
 ports in `ieee9_physics.py` and `case30_physics.py` reproduce the dataset
 trajectories at the measurement-noise floor (see [Results](#results)).
+The fault enters through the network and set-point rules (load fault: add α to
+`Y[b,b]`; line fault: remove the exact branch entries; generator trip:
+`Pset += −α·Pm0`), never through the state.
 
 **Identification branch.** The head's hypothesis probabilities build a
 soft-weighted faulted network. The free rollout (ΔP = 0) is supervised against
 the measured future, which is what trains identification through the physics.
 
-**Control branch.** The context (trunk features, hypothesis, α, initial state,
-network, set-point) is **detached** before it reaches the ΔP head, so the
-control loss cannot reshape identification. Without this, the controller could
-lower its loss by misidentifying the system as one that is easier to control.
+**Control branch.** The context (trunk features, hypothesis, α, initial state)
+is **detached** before it reaches the ΔP head, so the control loss cannot
+reshape identification (`Yred` and `Pset` are detached for the same reason).
 
-**Cascade ΔP head** (`--dp_head cascade`). An LSTM cell and a small FC stack
-refine ΔP over three steps. Each step rolls the current ΔP forward, describes
-the resulting excursion (peaks, timing, sign), and feeds that back in.
-Effectively it is a learned optimiser with the simulator in the loop.
+**Cascade ΔP head** (`--dp_head cascade`). Three refinement rounds: each round
+re-simulates with the current ΔP, describes the resulting excursion (peaks,
+timing, sign), and feeds that back into the head. The LSTM/MLP ablation differs
+in exactly one line: whether the cell's recurrent state `(h, c)` is threaded
+through the rounds. Effectively it is a learned optimiser with the simulator
+in the loop, trained by backpropagating through all 150 RK4 steps and all 3
+rounds.
 
 **Receding horizon.** The rollout assumes the fault persists for the whole
-horizon (1.5 s). A deployed controller would re-decide every ~20 ms and absorb
-the uncertainty about when the fault clears. The evaluation in this repository
-scores a single decision (see [limitations](#known-issues-and-limitations)).
+horizon (1.5 s); every loss and judgement is masked to the interval where the
+identified network actually holds (the valid mask). A deployed controller
+re-decides every ~20 ms and emits ΔP unconditionally; the reachability gate is
+a metric-scope definition, not a deployment filter. ΔP is withdrawn when the
+fault clears — not a design choice to be tuned but a physical requirement (see
+the hold-policy study in [Results](#results)).
 
 ---
 
@@ -104,9 +118,13 @@ scores a single decision (see [limitations](#known-issues-and-limitations)).
 │   ├── pinn_model.py               FaultEncoder + RolloutController
 │   ├── convert_dataset.py          .mat → scenario-major float32 memmap
 │   ├── train_receding.py           training
-│   ├── refine_dp.py                constrained ||ΔP|| minimisation
+│   ├── refine_dp.py                constrained ||ΔP|| minimisation (stage 3)
+│   ├── verify_true.py              true-dynamics verification (stage 4)
+│   ├── check_refined.py            refinement provenance check (tensor diff vs original)
 │   ├── diagnose_dp.py              head vs oracle vs feasibility ceiling
-│   └── verify_true.py              true-dynamics verification + plots
+│   ├── alpha_residual.py           signed severity error by fault type
+│   ├── compare_models.py           cross-architecture comparison, bootstrap CIs
+│   └── predict9.py                 rolling-window predictor
 └── bus_30/
     ├── CASE30_DATASET.md           dataset description
     ├── case30_ieee.json            system definition
@@ -122,14 +140,19 @@ scores a single decision (see [limitations](#known-issues-and-limitations)).
     ├── pinn_model30.py             FaultEncoder + RolloutController, 30-bus dimensions
     ├── train_case30.py             training
     ├── case30_common.py            shared loader, batch builder, actionability gate
-    ├── refine_dp30.py              constrained ||ΔP|| minimisation
+    ├── refine_dp30.py              constrained ||ΔP|| minimisation (stage 3)
+    ├── verify_true30.py            true-dynamics verification + reliability diagram
     ├── diagnose_dp30.py            head vs oracle vs feasibility ceiling
-    └── verify_true30.py            true-dynamics verification + plots
+    ├── alpha_residual30.py         signed severity error by fault type
+    └── compare_models.py           cross-architecture comparison, bootstrap CIs
 ```
 
 Each folder is self-contained. Run its scripts from inside that folder: the
 default paths to the `.mat` support files are relative to the working
-directory.
+directory. (An unused system-agnostic draft — `power_system.py`,
+`psys_physics.py`, `system_io.py`, `verify_physics.py` — is not part of either
+pipeline; `cross_validation_datagen_governor.py` is a confirmed remnant kept
+only because the `.mat` exporters import its constants.)
 
 The 30-bus post-training scripts (`refine_dp30.py`, `diagnose_dp30.py`,
 `verify_true30.py`) all import their batch builder and actionability gate
@@ -152,6 +175,18 @@ python case30_common.py --selftest --ckpt case30_ctrl/best.pt --data data30_mm
 pip install numpy scipy h5py matplotlib
 # plus a CUDA build of torch from https://pytorch.org
 ```
+
+Non-CUDA machines: two ready-made requirement files ship with the repo —
+`requirements-rocm.txt` (x86_64 Windows + AMD gfx1030: Windows ROCm torch
+wheels exist from AMD's repo.radeon.com (ROCm 7.2.1) and community TheRock
+builds — see that file for exact install commands; needs Python 3.12) and
+`requirements-directml.txt` (Windows ARM64 / aarch64 via torch-directml, no
+driver stack; also fine for any DX12 GPU on Windows). The package set
+(numpy, scipy, h5py, matplotlib, torch) was derived from the script imports —
+nothing else is third-party. The device-selection code (`train_*.py`,
+`case30_common.py`) is written for CUDA; the ROCm builds surface as 'cuda'
+via HIP so most code runs unchanged, while DirectML needs explicit
+`torch_directml.device()` amendments.
 
 Memory used during development:
 
@@ -198,6 +233,7 @@ case30_delta_p_labels.mat
 **/last.pt
 **/refined/
 **/verify/
+graphify-out/
 __pycache__/
 ```
 
@@ -216,10 +252,10 @@ From `bus_9/`, with `pinn_dataset.mat` in the folder:
 python convert_dataset.py --mat pinn_dataset.mat --out data_mm
 
 # 2. train identification + control
-python train_receding.py --data data_mm --out receding_cascade ^
-  --epochs 500 --batch_size 1024 --instants_per_scenario 4 ^
-  --w_max 1.0 --dt_window 0.01 --init_window 0.5 --lam_window 0.05 ^
-  --lstm_layers 3 --ctrl_start 100 ^
+python train_receding.py --data data_mm --out receding_cascade \
+  --epochs 500 --batch_size 1024 --instants_per_scenario 4 \
+  --w_max 1.0 --dt_window 0.01 --init_window 0.5 --lam_window 0.05 \
+  --lstm_layers 3 --ctrl_start 100 \
   --dp_head cascade --n_refine 3 --w_dp_norm 1.0 --margin 1e-3
 
 # 3. is the ΔP head the bottleneck?
@@ -230,9 +266,14 @@ python refine_dp.py --ckpt receding_cascade/best.pt --data data_mm --floor_tol 0
 
 # 5. check the emitted ΔP in the true dynamics, and plot
 python verify_true.py --ckpt receding_cascade/refined/best.pt --data data_mm --n 2048 --plots_per_type 3
+
+# 6. cross-architecture comparison with bootstrap CIs and the α-bias overlay
+python compare_models.py --data data_mm \
+  --ckpt "LSTM+LSTM=receding_cascade/refined/best.pt" \
+  --ckpt "MLP+MLP=receding_fullmlp/refined/best.pt"
 ```
 
-(`^` is the PowerShell/cmd line continuation; use `\` on Linux/macOS.)
+(Use `\` on Linux/macOS; `^` under PowerShell/cmd.)
 
 ---
 
@@ -258,23 +299,30 @@ python check_data30.py --data data30_mm
 python oracle_case30.py --data data30_mm --n 512
 
 # 4a. identification only (control branch off)
-python train_case30.py --data data30_mm --out case30_v3 ^
-  --epochs 60 --batch_size 512 --instants_per_scenario 4 ^
-  --w_max 1.0 --dt_window 0.01 --init_window 0.5 --lam_window 0 ^
-  --lstm_layers 5 --ctrl_start 999 ^
+python train_case30.py --data data30_mm --out case30_v3 \
+  --epochs 60 --batch_size 512 --instants_per_scenario 4 \
+  --w_max 1.0 --dt_window 0.01 --init_window 0.5 --lam_window 0 \
+  --lstm_layers 5 --ctrl_start 999 \
   --dp_head cascade --n_refine 3 --w_dp_norm 1.0 --margin 1e-3
 
 # 4b. add control on top (weights, feature statistics AND split carried over)
-python train_case30.py --data data30_mm --out case30_ctrl --init case30_v3/best.pt ^
-  --epochs 200 --batch_size 512 --instants_per_scenario 4 ^
-  --w_max 1.0 --dt_window 0.01 --init_window 0.5 --lam_window 0.05 ^
-  --lstm_layers 5 --ctrl_start 1 ^
+python train_case30.py --data data30_mm --out case30_ctrl --init case30_v3/best.pt \
+  --epochs 200 --batch_size 512 --instants_per_scenario 4 \
+  --w_max 1.0 --dt_window 0.01 --init_window 0.5 --lam_window 0.05 \
+  --lstm_layers 5 --ctrl_start 1 \
   --dp_head cascade --n_refine 3 --w_dp_norm 1.0 --margin 1e-3
 
 # 5. post-training
 python diagnose_dp30.py --ckpt case30_ctrl/best.pt --data data30_mm
 python refine_dp30.py   --ckpt case30_ctrl/best.pt --data data30_mm --floor_tol 0
+#    note: --warmup 40 (default) holds patience until the multiplier has decayed;
+#    on the 9-bus the refinement needed --lam0 1.0 --lam_eta 30 to bind at all
 python verify_true30.py --ckpt case30_ctrl/refined/best.pt --data data30_mm --split test
+
+# 6. cross-architecture comparison (own-floor and --rescue_floor common-floor runs)
+python compare_models.py --data data30_mm \
+  --ckpt "LSTM+LSTM=case30_ctrl/refined_full/best.pt" \
+  --ckpt "MLP+MLP=case30_fullmlp_ctrl/refined/best.pt"
 ```
 
 Notes:
@@ -289,10 +337,42 @@ Notes:
 - **`refine_dp30.py`** does not start counting patience until a warm-up has
   passed (`--warmup 40`). Its multiplier starts high and needs time to decay
   before ‖ΔP‖ can fall. On the 9-bus run, ‖ΔP‖ sat above the baseline for the
-  first 23 epochs.
+  first 23 epochs; at the default λ settings the constraint is slack enough
+  that nothing binds — the 9-bus runs needed `--lam0 1.0 --lam_eta 30`.
 - **`verify_true30.py`** plots each fault type, preferring cases rescued over
   the whole run. That makes them selected examples, not typical ones. Each
-  title states which tier the case came from.
+  title states which tier the case came from. It also reports the `p_fail`
+  reliability diagram and, with `--dp_hold window|run`, the hold-policy study.
+
+---
+
+## Ablation: LSTM vs size-matched MLP
+
+Every architecture is built twice: LSTM encoder + LSTM ΔP head, and an MLP
+encoder + MLP ΔP head whose **parameter count matches the LSTM variant**
+(`matched_mlp_proj()` solves for the projection width). Any difference in
+results therefore cannot be attributed to capacity.
+
+The evaluation (`compare_models.py`) runs identical test cases across
+architectures and reports 95% cluster-bootstrap CIs (resampling over unique
+scenarios — each metric's effective N is its own scenario count, smaller for
+rescue metrics). It also reports the signed α residual (gen+load only; the α
+head is masked to active gen/load faults and line faults are binary in the
+network build, so line-fault α is neither trained nor used).
+
+**Read the two refinement settings as answering different questions:**
+
+- **Common rescue floor** (`--rescue_floor`): both models held to the same bar —
+  the controlled comparison; use for any architecture claim.
+- **Each model's own floor** (`--floor_tol 0`, the default): each model held to
+  *its own* baseline rescue — the better operating point; use for deployment
+  numbers, not comparisons.
+
+The floor distinction is not cosmetic. The first 30-bus comparison (each model
+at its own floor) suggested architecture differences in rescue and ΔP effort;
+re-refining at a common floor collapsed those differences into noise. When
+floor values matter to a conclusion, the conclusion is about the floor, not
+the architecture.
 
 ---
 
@@ -303,13 +383,13 @@ evaluation protocol, not from the model. The protocol used by every script:
 
 | Rule | Why |
 |---|---|
-| **Trajectory loss is masked to the valid horizon.** It stops at `t_clear` if a fault is active, and at `t_fault` if pre-fault. | The rollout holds the fault; the real system clears it. Supervising past the change penalises an unknowable event. (9-bus traj 0.0221 → 0.00109.) |
-| **OOL is scored against the measured future over the same judged window**, not the whole-run label `y_ool`. | Like-for-like comparison. (9-bus OOL acc 0.853 → 0.966.) |
-| **Decision instants are drawn from `t_fault + U(0, 0.2 s)` for a share `p_active`**, the rest uniformly. | Matches the 50 ms detection convention of the ΔP labels. |
-| **Rescue is scored only on actionable instants**: fault active now, ω still inside the envelope now, non-empty judged window. | Instants after clearing, or already outside the envelope, are failures no controller could avoid. |
-| **ΔP is held until the fault clears** (`--dp_hold clear`). | Same convention as `y_delta_p`. |
+| **Trajectory loss is masked to the valid horizon.** It stops at `t_clear` if a fault is active, and at `t_fault` if pre-fault. | The rollout holds the fault; the real system clears it. Supervising past the change penalises an unknowable event. (9-bus traj 0.0221 → 0.00109.) About half of scenarios clear inside the 1.5 s horizon (min 0.082, mean 1.572 s). |
+| **OOL is scored against the measured future over the same judged window**, not the whole-run label `y_ool`. | Like-for-like comparison. (9-bus OOL acc 0.853 → 0.966.) The prediction side is the model's free (ΔP = 0) rollout over the same window. |
+| **Decision instants are drawn from `t_fault + U(0, 0.2 s)` for a share `p_active`**, the rest uniformly; 4 instants per scenario per epoch. | Matches the 50 ms detection convention of the ΔP labels. |
+| **Rescue is scored only on actionable instants**: fault active now, ω still inside the envelope now, non-empty judged window. | Instants after clearing, or already outside the envelope, are failures no controller could avoid. Two of the three gate conditions are label-derived — the gate defines which cases are *scored*, not which receive control; the unfiltered `dp_rescue_all` exists alongside. |
+| **ΔP is held until the fault clears** (`--dp_hold clear`). | Physically required: after clearing, a residual set-point offset settles at (ω−1) = R·ΔP with R = 1/20, so any sustained ΔP above 0.100 pu is outside the envelope at steady state (needy-case mean ‖ΔP‖ 0.664 → 6.6× the limit). Verified by hold-policy experiments — see [Results](#results). |
 | **Governor grace period of 200 ms**: peaks inside it are not scored. | Tg = 0.2 s; no set-point change acts sooner. |
-| **Primary control metrics are rescue rate and mean ‖ΔP‖.** Distance to `y_delta_p` is reported for reference only. | `y_delta_p` is the minimum-norm solution to a different question, judged to the end of the run. |
+| **Primary control metrics are rescue rate and mean ‖ΔP‖.** Distance to `y_delta_p` is reported for reference only. | `y_delta_p` is the minimum-norm solution to a different question (fixed 50 ms application, true fault known), judged to the end of the run. |
 
 **Rescue rate** = fraction of actionable decision instants whose judged-window
 peak |ω − 1| exceeds 0.005 without ΔP, and stays ≤ 0.005 with it.
@@ -322,9 +402,11 @@ alongside a figure.
 
 ## Results
 
-As of 24 September 2026, single training run per system. "Model" figures are
+Single training run per architecture per system (seed 11); the learned-window
+result is the only one replicated across both systems. "Model" figures are
 measured inside the model's own identified dynamics. "True" figures apply the
-emitted ΔP in a simulation of the real faulted system.
+emitted ΔP in a simulation of the real faulted system. Test split: 4096
+instants, 499 scenarios, 95% cluster-bootstrap CI.
 
 ### Physics ports
 
@@ -334,78 +416,122 @@ emitted ΔP in a simulation of the real faulted system.
 | OOL agreement | 100/100 | 100/100 |
 | Reduced admittance matrix vs stored | 1.8·10⁻¹⁵ | 1.5·10⁻¹⁵ |
 
-### 9-bus (`receding_cascade/best.pt`, epoch 151, test split)
+### 9-bus refined, test split (receding_cascade/refined, `--lam0 1.0 --lam_eta 30`)
 
-| Metric | Value |
+| Metric | LSTM+LSTM | MLP+MLP |
+|---|---|---|
+| Decision accuracy | 0.990 | 0.987 |
+| Severity α RMSE (gen+load) | 0.059 | 0.063 |
+| α signed bias | −0.002 (n.s.) | +0.014 (over, sig.) |
+| OOL TPR | 0.913 | 0.950 |
+| Rescue rate, TRUE dynamics | 0.977 | 0.987 |
+| Mean ‖ΔP‖ | 0.103 pu | 0.132 pu |
+| Learned window | 98 ms | 280 ms |
+
+Refinement is a strict Pareto gain: ‖ΔP‖ falls 26% (LSTM) / 15% (MLP) with
+rescue unchanged. Control-locality check: accuracy, α, TPR and window are
+identical to the unrefined row — refinement touches only the ΔP head
+(`check_refined.py` verifies this tensor-by-tensor). Identification metrics are
+architecture-tied here only because refinement held each model at its own
+floor; both baselines happened to be identical (0.9978), so the α-bias
+comparison is clean: the over-estimating MLP genuinely spent more.
+
+### 30-bus, two refinement settings (test split)
+
+**Common rescue floor** — the controlled comparison (use for architecture claims):
+
+| Metric | LSTM+LSTM | MLP+MLP |
+|---|---|---|
+| Decision accuracy | 0.990 | 0.990 |
+| Severity α RMSE | 0.060 | 0.082 |
+| OOL TPR | 0.987 | 0.962 |
+| Rescue rate, TRUE dynamics | 0.758 | 0.747 |
+| Mean ‖ΔP‖ | 0.115 pu | 0.111 pu |
+| Learned window | 128 ms | 277 ms |
+
+**Each model's own floor** — the better operating point (deployment numbers;
+not an architecture comparison — each model is held to its own baseline, and
+the LSTM's was the higher):
+
+| Metric | LSTM+LSTM | MLP+MLP |
+|---|---|---|
+| Rescue rate, TRUE dynamics | 0.864 | 0.830 |
+| Mean ‖ΔP‖ | 0.136 pu | 0.133 pu |
+
+Identification metrics are bit-identical between the settings (refinement
+trains only the ΔP head). Refinement history: the first own-floor LSTM run
+crashed mid-way (an unconverged ‖ΔP‖ of 0.151/0.166); the completed run
+(best epoch 191) reduced ‖ΔP‖ 0.166 → 0.137 while *raising* rescue — Pareto,
+not trade, in both architectures. After refinement the ‖ΔP‖ gap is 0.003
+(own floor) / 0.004 (common floor): **there is no control-effort economy
+difference between the architectures on the 30-bus**, and the rescue/ΔP
+differences of the original own-floor comparison were an artefact of the
+unmatched floors.
+
+### What is defensible
+
+- **Identification is architecture-agnostic.** Decision accuracy ≈ 0.99 for
+  both architectures on both systems.
+- **The learned window is the only replicating architectural effect**:
+  the LSTM needs 98–128 ms of history, the MLP 277–280 ms — a 2–3× difference
+  in the same direction on two independent systems, with a mechanistic
+  explanation (recurrence compresses history into its state).
+- **The α-bias mechanism is demonstrated on the 9-bus**: the over-estimating
+  MLP spent more ΔP for more rescue, with no confound. On the 30-bus both
+  models under-estimate severity (−0.009 / −0.023), but the control-loop
+  consequences are inside the noise. Within-run z-scores establish each bias;
+  direction survival across reseeds is untested.
+- **Generator-trip failure on the 30-bus is a feasibility limit, not a head
+  failure** at the severe end, but a genuine head failure at the mild end
+  (see below).
+
+### Generator trips on the 30-bus (cross-tabulated, own-floor checkpoint)
+
+Of the missed generator trips: severe ones (α 0.70–0.90, 49 cases, rescue
+0.571) fail at the **actuator rail** — 78.6% had ΔP saturated at ±dp_max, so
+no set-point change within the limits could have saved them (9 of 42 left
+authority unused). Below α 0.70, by contrast, 10 misses (7 in α 0.30–0.50,
+3 in 0.50–0.70) show **no rail saturation** — a genuine head failure on mild
+faults; that is the specific residual defect. Control effort is
+non-monotonic in α (peaks at α 0.50–0.70), not inverted at the top.
+
+### p_fail calibration (reliability diagram, own-floor checkpoint)
+
+`p_fail` — the bounded surrogate the control loss minimises — tracks its event
+to within 0.010 (ECE 0.028 vs its own rollout event): **the surrogate is
+calibrated; `--dp_tau` needs no change.** The 4.7-point gap between model-
+internal (0.884) and true rescue (0.837) lives in the rollout, concentrated
+exactly on the needy cases (model 0.116 vs true 0.163). The safety margin
+fails in both directions at once: near-certain-failure cases actually fail
+rarely (over-protected by ×2–4) while 6.4% of confident-safe needy cases fail
+(under-protected ×6). A uniform margin trades one failure mode for the other; a
+severity-scaled margin is untested future work.
+
+### ΔP hold policy (withdrawal at clearing is physically required)
+
+| `--dp_hold` | end-of-run rescue |
 |---|---|
-| Trajectory loss (ω RMSE) | 0.00464 (6.81·10⁻⁴) |
-| Hypothesis accuracy (13 classes) | 0.9902 |
-| OOL accuracy (TPR / TNR) | 0.9583 (0.923 / 0.974) |
-| Severity α RMSE (range 0.1–1.0) | 0.0605 |
-| Rescue rate, model dynamics | 0.9943 |
-| Mean ‖ΔP‖ | 0.1463 pu |
-| Learned window | 97.5 ms (86–107 ms across runs) |
+| `clear` (withdrawn at clearing) | **0.668** |
+| `window` | 0.456 |
+| `run` (held to the end) | **0.056** |
 
-- **Diagnostic:** the head (0.9947) is within half a point of the
-  gradient-descent oracle and the feasibility ceiling (0.995–1.000 across
-  runs), so the head is not the bottleneck.
-- **Cascade vs linear ΔP head:** rescue 0.9570 vs 0.9603, a difference within
-  noise (1 SE ≈ 0.0064). ‖ΔP‖ is 20% lower with the cascade (0.112 vs
-  0.140 pu).
-- **Refinement:** an earlier run reported a 26.2% ‖ΔP‖ reduction. See
-  [known issues](#known-issues-and-limitations) before quoting it.
+Holding longer is catastrophically worse, and droop explains it: after the
+fault clears the network is healthy, so a residual set-point offset settles at
+(ω−1) = R·ΔP (R = 1/20) — any sustained ΔP above 0.100 pu is outside the
+envelope at steady state, by construction. This validates the
+`HOLD_MODE = 'until_clear'` choice in `compute_delta_p.m`. The residual gap
+between in-window (0.837) and end-of-run (0.668) rescue — about a fifth of
+saved cases drift out during ring-down — is the remaining open question; the
+leading candidate is the withdrawal transient (a ramped withdrawal would test
+it, as a new control policy). Without ΔP the end-of-run rate is 0.000.
 
-### 30-bus (`case30_ctrl/best.pt`, epoch 45)
-
-**Identification and prediction** (test split, 500 scenarios):
-
-| Metric | Value |
-|---|---|
-| Trajectory loss (ω RMSE) | 0.00908 (9.53·10⁻⁴) |
-| Hypothesis accuracy (57 classes) | 0.9851 |
-| — given a fault is active: exact class / type | 0.9907 / 0.9965 |
-| — top-5 / fault detection | 0.9969 / 0.9858 |
-| OOL accuracy (TPR / TNR) | 0.9610 (0.979 / 0.955) |
-| Severity α RMSE | 0.0701 |
-| Learned window | 128.3 ms (not converged; see limitations) |
-
-A perfect identifier (true fault and severity, measured starting state) would
-get trajectory loss 0.00031. With the starting state averaged over 5 samples
-it would get 0.00014 (`oracle_case30.py`).
-
-**Control, model dynamics** (test split): rescue 0.8671 on actionable cases,
-overall ok 0.9572, mean ‖ΔP‖ 0.1657 pu.
-
-**Head vs ceiling** (`diagnose_dp30.py`, test split, decisions within 200 ms
-of onset, 166 cases needing rescue):
+### Head vs ceiling (30-bus, `diagnose_dp30.py`, 166 needy cases)
 
 | | Rescue | Mean ‖ΔP‖ |
 |---|---|---|
 | Trained head | 0.9217 | 0.600 pu |
 | Oracle, same objective | 0.8916 | 0.517 pu |
 | Feasible, no effort penalty | 0.9398 | 0.728 pu |
-
-The head is within 1.8 points of the feasibility ceiling. 10 of its 13 misses
-are also missed by the feasibility oracle, and 9 of the 13 are
-`dp_status 3`. The remaining failures are actuator limits: only G1 and G2 have
-governors, and a large G1 trip leaves a deficit bigger than ±1 pu.
-
-**True dynamics** (`verify_true30.py`, validation split, 2048 instants,
-337 needing rescue):
-
-| Metric | Value |
-|---|---|
-| Rescue, true dynamics | 0.8309 |
-| Rescue, model dynamics (same cases) | 0.8843 |
-| — load faults (n = 186) | 0.973 |
-| — generator trips (n = 148) | 0.669 |
-| Healthy instants pushed out of the envelope by ΔP | 0 of 1442 |
-| Rescued through to the end of the run (with / without ΔP) | 0.700 / 0.000 |
-| Mean ‖ΔP‖: needing rescue / not needing | 0.630 / 0.081 pu |
-
-The model-internal rescue rate is 5.3 points optimistic, almost entirely on
-generator trips and on the earliest decisions (0–50 ms: 0.77 true vs 0.89
-model).
 
 ---
 
@@ -415,52 +541,47 @@ model).
 - **Single-decision evaluation.** Every figure scores one decision with ΔP held
   until the fault clears. The receding-horizon controller the design assumes
   (re-deciding every ~20 ms) has not been replayed in closed loop. This is the
-  main reason the 30-bus end-of-run rescue (0.700) is below the in-window
-  figure (0.831): faults last up to 3 s, beyond the 1.5 s horizon.
-- **Single seed per configuration.** The cascade head's advantages (lower
-  ‖ΔP‖, slightly better identification) come from one run per arm.
+  main reason the 30-bus end-of-run rescue (0.668) is below the in-window
+  figure (0.837): faults last up to 3 s, beyond the 1.5 s horizon.
+- **Single seed per configuration.** Run-to-run variance was measured once and
+  is large (two near-identical 30-bus runs differed in TPR 0.979 vs 0.937):
+  gaps ≲0.04 cannot be attributed to architecture from one seed. The
+  window result does not depend on this.
 - **No independent Simulink check of the final ΔP.** Verification uses the
   Python port, which reproduces the Simulink data at the noise floor.
 - **Validation vs test.** `verify_true30.py` defaults to the validation split;
   use `--split test` for reported numbers.
+- **The hold-policy `window`/`run` rows were measured on an interrupted
+  checkpoint** and not re-run on the completed one; the ordering (and the
+  droop arithmetic) are far outside any plausible refinement effect, but
+  re-measure before quoting them numerically.
 
 **30-bus**
-- **Generator trips are the weak spot:** 0.669 true rescue. It is not yet
-  known whether the cause is marginal solutions (the model's rescue just
-  clears the margin, the real system just misses) or severity underestimated
-  early (Pm reaches a new set-point only through the 0.2 s governor lag).
+- **Generator trips below α 0.70 are the residual defect:** 10 misses with no
+  rail saturation — the head fails on mild faults. At the severe end the same
+  cell is actuator-limited (see cross-tab above): more capacity would not help;
+  more actuated machines or a higher `dp_max` would.
+- **α saturates at the top of its range, in the unsafe direction.** Every
+  configuration under-estimates severity in the α 0.90–1.01 bin (9-bus LSTM
+  −0.037, MLP −0.038; 30-bus LSTM −0.056, MLP −0.100, 96% of cases under).
+  `α = 0.1 + 0.9·sigmoid(raw)` reaches 1.0 only asymptotically.
+  `--alpha_hi 1.1` (a supported training flag) would put α = 1.0 in the
+  sigmoid's responsive band; untested (requires retraining).
 - **The safety margin roughly equals the model's own error.** The margin is
-  1·10⁻³, while ω RMSE on the test set is 9.5·10⁻⁴. Refinement spends that
-  margin, so refined results must be re-verified in true dynamics.
-- **The learned window did not converge.** It fell monotonically from 500 ms
-  and was still falling when early stopping fired. The mask edge (β = 26.9 ms)
-  was also not fully annealed at the selected epoch. Treat 128.3 ms as
-  provisional.
-- **Refinement has not yet produced a cheaper feasible ΔP.** The first run
-  stopped on patience during the multiplier's warm-up; `--warmup` fixes that.
-  The diagnostic suggests the head is already near the best rescue/effort
-  trade-off, so expect a small reduction, not the 9-bus 26%.
-
-**9-bus scripts (fixed in the 30-bus versions, not yet back-ported)**
-- **Mask edge overwritten on load.** `refine_dp.py`, `diagnose_dp.py` and
-  `verify_true.py` set β to `--beta_min` after loading. The checkpoint was
-  selected with a softer edge, so these scripts evaluate a slightly different
-  window than training reported.
-- **Refinement compares different splits.** `refine_dp.py` compares a
-  validation baseline against a test result (the 26.2% figure is validation
-  0.1043 → test 0.0770). It also saves the first epoch that meets the rescue
-  floor even if its ‖ΔP‖ is higher than the baseline's. Re-measure on test
-  before quoting.
-- **No feature normalisation** in `train_receding.py`. It trains well without
-  it on the 9-bus, but the two systems differ in this respect.
-- **The batch builder and gate are duplicated** across four 9-bus scripts. They
-  drifted apart twice during development. The 30-bus side uses one shared
-  module with a self-test.
+  1·10⁻³ while ω RMSE on the test set is 9.5·10⁻⁴, and the model's own rollout
+  is ~5 points optimistic against true dynamics on needy cases. Refinement
+  spends that margin; re-verify refined results in true dynamics.
+- **The learned window did not fully converge** on the 30-bus. The mask edge
+  (β = 26.9 ms) was not fully annealed at the selected epoch. Treat 128 ms as
+  provisional (plateau phrasing: "LSTM windows settle near 100–150 ms, MLP
+  near 280 ms").
 
 **Both systems**
 - **Split.** The training scripts regenerate a 90/5/5 split with a fixed seed
   and store it in the checkpoint. They ignore the 80/10/10 `split` shipped in
-  the datasets.
+  the datasets. Reason: more training data, with 500 scenarios judged
+  sufficient for val/test — a project decision, not a defect in the stored
+  split.
 - **Sampling.** Both models read every 10th raw sample (10 ms). On the 9-bus
   this happens in two steps: the converter keeps every 5th sample, and the
   window reads every 2nd. Averaging instead of decimating (`--agg mean`) would
@@ -470,6 +591,10 @@ model).
   This is a limit of the actuator, not of the model.
 - **No fault-time head.** Fault time is not predicted; the decision is
   anchored to the measurement window only.
+- **Line-fault α is neither trained nor used** (the α loss is masked to
+  gen/load and line faults are binary in the network build). Any α statistic
+  pooling line faults measures a free parameter; the reported α RMSE already
+  masks to gen+load.
 
 ---
 

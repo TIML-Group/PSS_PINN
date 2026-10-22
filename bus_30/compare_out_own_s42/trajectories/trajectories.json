@@ -1,0 +1,89 @@
+[
+ {
+  "scenario": 4864,
+  "type": "gen",
+  "t_decision": 2.640026106775135,
+  "generator": 2,
+  "needed_rescue": true,
+  "peak_free_run": 0.00531613826751709,
+  "models": {
+   "LSTM+LSTM": {
+    "dP": [
+     0.20026402175426483,
+     0.11289619654417038
+    ],
+    "peak_run": 0.001953423023223877,
+    "peak_window": 0.001953423023223877,
+    "status": "inside all run"
+   },
+   "MLP+MLP": {
+    "dP": [
+     0.10612326115369797,
+     0.16010281443595886
+    ],
+    "peak_run": 0.0023775696754455566,
+    "peak_window": 0.0023775696754455566,
+    "status": "inside all run"
+   }
+  },
+  "file": "compare_out_own_s42\\trajectories\\gen_sc4864_G2"
+ },
+ {
+  "scenario": 5991,
+  "type": "load",
+  "t_decision": 3.72733902000992,
+  "generator": 5,
+  "needed_rescue": true,
+  "peak_free_run": 0.008032381534576416,
+  "models": {
+   "LSTM+LSTM": {
+    "dP": [
+     0.19946736097335815,
+     0.2066793441772461
+    ],
+    "peak_run": 0.002507507801055908,
+    "peak_window": 0.002507507801055908,
+    "status": "inside all run"
+   },
+   "MLP+MLP": {
+    "dP": [
+     0.2273358553647995,
+     0.21181155741214752
+    ],
+    "peak_run": 0.0025007128715515137,
+    "peak_window": 0.0025007128715515137,
+    "status": "inside all run"
+   }
+  },
+  "file": "compare_out_own_s42\\trajectories\\load_sc5991_G5"
+ },
+ {
+  "scenario": 8755,
+  "type": "line",
+  "t_decision": 3.5287073567335336,
+  "generator": 5,
+  "needed_rescue": false,
+  "peak_free_run": 0.0004642009735107422,
+  "models": {
+   "LSTM+LSTM": {
+    "dP": [
+     0.007523521315306425,
+     -0.006980622187256813
+    ],
+    "peak_run": 0.00046753883361816406,
+    "peak_window": 0.0003737211227416992,
+    "status": "inside all run"
+   },
+   "MLP+MLP": {
+    "dP": [
+     -0.005906516686081886,
+     -0.0128277987241745
+    ],
+    "peak_run": 0.0003745555877685547,
+    "peak_window": 0.00021255016326904297,
+    "status": "inside all run"
+   }
+  },
+  "file": "compare_out_own_s42\\trajectories\\line_sc8755_G5"
+ }
+]

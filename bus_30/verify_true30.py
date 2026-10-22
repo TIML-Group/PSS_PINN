@@ -33,6 +33,7 @@ Plots one figure per case, per fault type, to <out>/plots/.
 
 import argparse, json, os
 
+import json
 import numpy as np
 import torch
 import matplotlib
@@ -60,6 +61,10 @@ ap.add_argument('--dp_hold', default='clear', choices=['clear', 'window', 'run']
                      "until the judged window ends; 'run' never withdrawn.")
 ap.add_argument('--plots_per_type', type=int, default=3)
 ap.add_argument('--split', default='val', choices=['val', 'test', 'train'])
+ap.add_argument('--instants-file', default=None,
+                help='load the KS/TK draw from compare_models'
+                     '<out>/instants.json (shared scenarios); '
+                     'requires matching --n and --split.')
 ap.add_argument('--seed', type=int, default=11)
 args = ap.parse_args()
 
@@ -157,7 +162,12 @@ calib_rows = []
 n_done = 0
 while n_done < args.n:
     bs = min(args.batch, args.n - n_done)
-    b = su.to_dev(su.make_batch(rng.choice(idx, bs), rng))
+    if args.instants_file:
+        if n_done == 0:
+            _inst = json.load(open(args.instants_file))
+            _KS = np.asarray(_inst['ks'], dtype=int); _TK = np.asarray(_inst['tk'], dtype=float)
+            print(f"instants loaded: {len(_KS)} from {args.instants_file}")
+        b = su.to_dev(su.make_batch(_KS[n_done:n_done + bs], rng, tk_fixed=_TK[n_done:n_done + bs]))
     ks, tk, valid_t = b['ks'], b['tk'], b['valid_t']
     with torch.no_grad():
         o = model(b['feat'], b['x_meas'], hard=True, ctrl=True, vmask=b['vmask'])

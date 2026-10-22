@@ -87,6 +87,10 @@ class Setup:
 
         # data
         self.X = np.load(os.path.join(data, 'X.npy'), mmap_mode='r')
+        # Whole file into RAM when it fits: every epoch re-touches all scenarios in random
+        # order, so an mmap over a spinning disk thrashes (GPU idles waiting on batch build).
+        if self.X.nbytes < 4e9:
+            self.X = np.asarray(self.X)
         md = np.load(os.path.join(data, 'meta.npz'), allow_pickle=True)
         g = lambda k: md[k].ravel()
         self.t_grid = g('t'); self.DT = float(md['dt_solver'])

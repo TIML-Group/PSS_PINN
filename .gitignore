@@ -1,0 +1,22 @@
+# graphify outputs (local knowledge-graph builds — agent-generated, not for the research-group repo)
+graphify-out/
+
+# Python venv
+.venv*/
+
+# regenerated datasets (2-3 GB each; rebuilt from MATLAB sims, not for the repo)
+bus_9/data_mm.zip
+bus_30/data30_mm.zip
+
+# OS junk
+Thumbs.db
+desktop.ini
+
+# dashboard strays
+server.out
+server.pid
+dashboard.log
+
+# throwaway verify runs + cached json from 2026-10-22 before/after measurement
+receding_*__*_verify/
+_verify_before_after_test.json

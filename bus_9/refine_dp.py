@@ -172,6 +172,11 @@ class Progress:
 
 # ── data (same construction as train_receding.py) ───────────────────────────
 X = np.load(os.path.join(args.data, 'X.npy'), mmap_mode='r')
+# Whole file into process RAM: each epoch re-touches every scenario in random order, so an
+# mmap over a spinning disk thrashes (GPU idles at a few % waiting on batch building).
+# 2-3 GB fits easily in RAM; the mmap fallback stays for machines without the headroom.
+if X.nbytes < 4e9:
+    X = np.asarray(X)
 md = np.load(os.path.join(args.data, 'meta.npz'))
 DT = float(md['dt_solver']); t_grid = md['t']; lines = md['lines'].astype(int)
 y_type = md['y_type'].ravel().astype(int)

@@ -63,9 +63,26 @@ uncontrolled swing (--plot_gen N to choose). --plot_pick rescued | disagree |
 random chooses which cases; --plot_scenario K [K ...] draws specific ones.
 These are illustrations picked on purpose, not measurements.
 
-Outputs (in --out): compare_results.json, compare_summary.csv, compare.png,
-trajectories/<type>_sc<id>_G<n>.png, trajectories/trajectories.json
+Outputs (in --out): compare_results.json, compare_summary.csv, compare.png +
+compare.svg, trajectories/<type>_sc<id>_G<n>.png + .svg, trajectories/trajectories.json
+(every figure is written in both raster PNG and vector SVG)
 """
+
+def save_fig(fig, base, dpi=150, bbox=None):
+    """Save figure as both PNG (raster) and SVG (vector). base = path WITHOUT extension."""
+    errs = []
+    for ext in ('.png', '.svg'):
+        try:
+            fig.savefig(base + ext, dpi=dpi, **({'bbox_inches': bbox} if bbox else {}))
+        except OSError:
+            # Windows file lock / OneDrive sync race: retry once with a unique name
+            try:
+                fig.savefig(base + '_' + str(int(time.time())) + ext, dpi=dpi,
+                            **({'bbox_inches': bbox} if bbox else {}))
+            except OSError as e2:
+                errs.append(f'{ext}: {e2}')
+    if errs:
+        print('  [save_fig] failed:', '; '.join(errs))
 
 import argparse, csv, json, math, os, sys, time
 
@@ -97,6 +114,10 @@ ap.add_argument('--boot', type=int, default=2000, help='bootstrap resamples')
 ap.add_argument('--latency_reps', type=int, default=30)
 ap.add_argument('--seed', type=int, default=11)
 ap.add_argument('--out', default='compare_out')
+ap.add_argument('--instants-file', default=None,
+                help='load KS/TK draw from a json (shared with '
+                     'verify_true); with no file, the draw is made '
+                     'and saved to <out>/instants.json')
 ap.add_argument('--no_plot', action='store_true')
 ap.add_argument('--plots_per_type', type=int, default=1,
                 help='trajectory figures per fault type (gen / load / line): one '
@@ -356,17 +377,29 @@ for m in models:
 
 # ── decision instants, drawn once, as training draws them ───────────────────
 A0 = models[0].A
-rng = np.random.default_rng(args.seed)
-KS = rng.choice(pool, args.n)
-lo, hi = A0['w_max'], float(SYS.t_grid[-1]) - A0['horizon']
-TK = rng.uniform(lo, hi, args.n)
-if A0.get('p_active', 0) > 0:
-    pick = rng.random(args.n) < A0['p_active']
-    a = np.clip(SYS.t_fault[KS], lo, hi); b = np.clip(SYS.t_clear[KS], lo, hi)
-    if A0.get('onset_window', 0) and A0['onset_window'] > 0:
-        b = np.minimum(b, a + A0['onset_window'])
-    ok = pick & (b > a)
-    TK[ok] = rng.uniform(a[ok], b[ok])
+if args.instants_file:
+    _inst = json.load(open(args.instants_file))
+    KS = np.asarray(_inst['ks'], dtype=int)
+    TK = np.asarray(_inst['tk'], dtype=float)
+    assert len(KS) == args.n, f"--instants-file has {len(KS)} instants, --n is {args.n}"
+    print(f"instants loaded from {args.instants_file} (shared draw)")
+else:
+    rng = np.random.default_rng(args.seed)
+    KS = rng.choice(pool, args.n)
+    lo, hi = A0['w_max'], float(SYS.t_grid[-1]) - A0['horizon']
+    TK = rng.uniform(lo, hi, args.n)
+    if A0.get('p_active', 0) > 0:
+        pick = rng.random(args.n) < A0['p_active']
+        a = np.clip(SYS.t_fault[KS], lo, hi); b = np.clip(SYS.t_clear[KS], lo, hi)
+        if A0.get('onset_window', 0) and A0['onset_window'] > 0:
+            b = np.minimum(b, a + A0['onset_window'])
+        ok = pick & (b > a)
+        TK[ok] = rng.uniform(a[ok], b[ok])
+    os.makedirs(args.out, exist_ok=True)
+    json.dump({'ks': KS.tolist(), 'tk': TK.tolist(), 'seed': args.seed,
+               'split': args.split, 'pool_note': 'test minus train/val'},
+              open(os.path.join(args.out, 'instants.json'), 'w'), indent=1)
+    print(f"instant draw saved -> {os.path.join(args.out, 'instants.json')}")
 N_TRUE = 0 if args.no_true else min(args.n_true, args.n)
 ACTIVE = (TK >= SYS.t_fault[KS]) & (TK < SYS.t_clear[KS])
 AGE = TK - SYS.t_fault[KS]
@@ -874,11 +907,8 @@ if not args.no_plot:
                  f"{args.n} instants, {len(uniq)} scenarios; bars = 95% "
                  f"cluster-bootstrap CI)", fontsize=11, color=INK, x=0.01, ha='left')
     fig.tight_layout(rect=(0, 0, 1, 0.95))
-    p = os.path.join(args.out, 'compare.png')
-    try:
-        fig.savefig(p, dpi=150)
-    except OSError:
-        p = os.path.join(args.out, f'compare_{int(time.time())}.png'); fig.savefig(p, dpi=150)
+    p = os.path.join(args.out, 'compare')
+    save_fig(fig, p, dpi=150)
     plt.close(fig)
     print(f"-> {p}")
 # ── trajectory figures: one generator, whole run, every architecture ────────
@@ -1020,12 +1050,8 @@ if not args.no_plot and args.plots_per_type > 0:
                 + ("" if needed_j else "   [this case did not need rescue]"),
                 fontsize=9.5, color=INK, loc='left')
             fig.tight_layout()
-            p = os.path.join(tdir, f"{tname}_sc{k}_G{g+1}.png")
-            try:
-                fig.savefig(p, dpi=150, bbox_inches='tight')
-            except OSError:
-                p = os.path.join(tdir, f"{tname}_sc{k}_G{g+1}_{int(time.time())}.png")
-                fig.savefig(p, dpi=150, bbox_inches='tight')
+            p = os.path.join(tdir, f"{tname}_sc{k}_G{g+1}")
+            save_fig(fig, p, dpi=150, bbox='tight')
             plt.close(fig)
             log['file'] = p; traj_log.append(log)
             print(f"  {p}   " + "  ".join(
