@@ -1,0 +1,188 @@
+[
+ {
+  "scenario": 487,
+  "type": "gen",
+  "t_decision": 2.977288029789558,
+  "generator": 1,
+  "needed_rescue": true,
+  "peak_free_run": 0.015102505683898926,
+  "models": {
+   "LSTM+LSTM": {
+    "dP": [
+     0.3997516930103302,
+     0.491631418466568,
+     0.37056833505630493
+    ],
+    "peak_run": 0.003950357437133789,
+    "peak_window": 0.003950357437133789,
+    "status": "inside all run"
+   },
+   "MLP+MLP": {
+    "dP": [
+     0.3630109131336212,
+     0.6181478500366211,
+     0.34158632159233093
+    ],
+    "peak_run": 0.003468155860900879,
+    "peak_window": 0.003468155860900879,
+    "status": "inside all run"
+   }
+  },
+  "file": "compare_common_floor_s42\\trajectories\\gen_sc487_G1"
+ },
+ {
+  "scenario": 2799,
+  "type": "gen",
+  "t_decision": 1.206137807355635,
+  "generator": 1,
+  "needed_rescue": true,
+  "peak_free_run": 0.006485104560852051,
+  "models": {
+   "LSTM+LSTM": {
+    "dP": [
+     0.11361535638570786,
+     0.11312060803174973,
+     0.12457872182130814
+    ],
+    "peak_run": 0.002667069435119629,
+    "peak_window": 0.002667069435119629,
+    "status": "inside all run"
+   },
+   "MLP+MLP": {
+    "dP": [
+     0.12991595268249512,
+     0.11280423402786255,
+     0.1157049760222435
+    ],
+    "peak_run": 0.002593398094177246,
+    "peak_window": 0.002593398094177246,
+    "status": "inside all run"
+   }
+  },
+  "file": "compare_common_floor_s42\\trajectories\\gen_sc2799_G1"
+ },
+ {
+  "scenario": 5991,
+  "type": "load",
+  "t_decision": 3.72733902000992,
+  "generator": 3,
+  "needed_rescue": true,
+  "peak_free_run": 0.008300185203552246,
+  "models": {
+   "LSTM+LSTM": {
+    "dP": [
+     0.09004229307174683,
+     0.11681561172008514,
+     0.1151580959558487
+    ],
+    "peak_run": 0.0040051937103271484,
+    "peak_window": 0.0040051937103271484,
+    "status": "inside all run"
+   },
+   "MLP+MLP": {
+    "dP": [
+     0.20368270576000214,
+     0.15593045949935913,
+     0.15277841687202454
+    ],
+    "peak_run": 0.002453744411468506,
+    "peak_window": 0.002453744411468506,
+    "status": "inside all run"
+   }
+  },
+  "file": "compare_common_floor_s42\\trajectories\\load_sc5991_G3"
+ },
+ {
+  "scenario": 4475,
+  "type": "load",
+  "t_decision": 1.4096036090431903,
+  "generator": 3,
+  "needed_rescue": true,
+  "peak_free_run": 0.011577725410461426,
+  "models": {
+   "LSTM+LSTM": {
+    "dP": [
+     0.3134634792804718,
+     0.2614555358886719,
+     0.21370112895965576
+    ],
+    "peak_run": 0.003810882568359375,
+    "peak_window": 0.003810882568359375,
+    "status": "inside all run"
+   },
+   "MLP+MLP": {
+    "dP": [
+     0.43098610639572144,
+     0.23524165153503418,
+     0.2195107340812683
+    ],
+    "peak_run": 0.0035849809646606445,
+    "peak_window": 0.0034047365188598633,
+    "status": "inside all run"
+   }
+  },
+  "file": "compare_common_floor_s42\\trajectories\\load_sc4475_G3"
+ },
+ {
+  "scenario": 8755,
+  "type": "line",
+  "t_decision": 3.5287073567335336,
+  "generator": 2,
+  "needed_rescue": false,
+  "peak_free_run": 0.00497889518737793,
+  "models": {
+   "LSTM+LSTM": {
+    "dP": [
+     -0.09709714353084564,
+     -0.16930247843265533,
+     0.13991037011146545
+    ],
+    "peak_run": 0.0038499832153320312,
+    "peak_window": 0.0038499832153320312,
+    "status": "inside all run"
+   },
+   "MLP+MLP": {
+    "dP": [
+     -0.17700208723545074,
+     -0.15300285816192627,
+     0.21130667626857758
+    ],
+    "peak_run": 0.004003643989562988,
+    "peak_window": 0.004003643989562988,
+    "status": "inside all run"
+   }
+  },
+  "file": "compare_common_floor_s42\\trajectories\\line_sc8755_G2"
+ },
+ {
+  "scenario": 6958,
+  "type": "line",
+  "t_decision": 1.4506122864935547,
+  "generator": 3,
+  "needed_rescue": false,
+  "peak_free_run": 0.009081840515136719,
+  "models": {
+   "LSTM+LSTM": {
+    "dP": [
+     -0.11345575749874115,
+     0.015185557305812836,
+     -0.20134329795837402
+    ],
+    "peak_run": 0.010696649551391602,
+    "peak_window": 0.0036821365356445312,
+    "status": "inside judged window only"
+   },
+   "MLP+MLP": {
+    "dP": [
+     -0.11344513297080994,
+     0.029100436717271805,
+     -0.18439777195453644
+    ],
+    "peak_run": 0.010354161262512207,
+    "peak_window": 0.0037871599197387695,
+    "status": "inside judged window only"
+   }
+  },
+  "file": "compare_common_floor_s42\\trajectories\\line_sc6958_G3"
+ }
+]
