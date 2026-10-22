@@ -68,7 +68,7 @@ compare.svg, trajectories/<type>_sc<id>_G<n>.png + .svg, trajectories/trajectori
 (every figure is written in both raster PNG and vector SVG)
 """
 
-def save_fig(fig, base, dpi=150, bbox=None):
+def save_fig(fig, base, dpi=300, bbox=None):
     """Save figure as both PNG (raster) and SVG (vector). base = path WITHOUT extension."""
     errs = []
     for ext in ('.png', '.svg'):
@@ -908,7 +908,7 @@ if not args.no_plot:
                  x=0.02, ha='left', va='top', linespacing=1.35)
     fig.tight_layout(rect=(0, 0, 1, 0.90), h_pad=0.9, w_pad=0.9)
     p = os.path.join(args.out, 'compare')
-    save_fig(fig, p, dpi=600)
+    save_fig(fig, p, dpi=300)
     plt.close(fig)
     print(f"-> {p}")
 # ── trajectory figures: one generator, whole run, every architecture ────────
@@ -1052,7 +1052,7 @@ if not args.no_plot and args.plots_per_type > 0:
                 fontsize=6.2, color=INK, loc='left')
             fig.tight_layout()
             p = os.path.join(tdir, f"{tname}_sc{k}_G{g+1}")
-            save_fig(fig, p, dpi=600, bbox='tight')
+            save_fig(fig, p, dpi=300, bbox='tight')
             plt.close(fig)
             log['file'] = p; traj_log.append(log)
             print(f"  {p}   " + "  ".join(
