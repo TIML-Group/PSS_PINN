@@ -18,8 +18,8 @@
    },
    "MLP+MLP": {
     "dP": [
-     0.10136348754167557,
-     0.11182719469070435
+     0.10136355459690094,
+     0.11182723194360733
     ],
     "peak_run": 0.002897918224334717,
     "peak_window": 0.002897918224334717,
@@ -27,35 +27,6 @@
    }
   },
   "file": "compare_out_common_s42\\trajectories\\gen_sc4864_G2"
- },
- {
-  "scenario": 4873,
-  "type": "gen",
-  "t_decision": 3.732406889565957,
-  "generator": 2,
-  "needed_rescue": true,
-  "peak_free_run": 0.006072342395782471,
-  "models": {
-   "LSTM+LSTM": {
-    "dP": [
-     0.18950910866260529,
-     0.12061858177185059
-    ],
-    "peak_run": 0.002639472484588623,
-    "peak_window": 0.0024524927139282227,
-    "status": "inside all run"
-   },
-   "MLP+MLP": {
-    "dP": [
-     0.11542677879333496,
-     0.11884714663028717
-    ],
-    "peak_run": 0.0035074949264526367,
-    "peak_window": 0.003349900245666504,
-    "status": "inside all run"
-   }
-  },
-  "file": "compare_out_common_s42\\trajectories\\gen_sc4873_G2"
  },
  {
   "scenario": 5991,
@@ -76,8 +47,8 @@
    },
    "MLP+MLP": {
     "dP": [
-     0.18916594982147217,
-     0.2101033478975296
+     0.18916627764701843,
+     0.21010419726371765
     ],
     "peak_run": 0.002507030963897705,
     "peak_window": 0.002507030963897705,
@@ -85,35 +56,6 @@
    }
   },
   "file": "compare_out_common_s42\\trajectories\\load_sc5991_G5"
- },
- {
-  "scenario": 9238,
-  "type": "load",
-  "t_decision": 2.9523717549759043,
-  "generator": 1,
-  "needed_rescue": true,
-  "peak_free_run": 0.005253851413726807,
-  "models": {
-   "LSTM+LSTM": {
-    "dP": [
-     0.10704156756401062,
-     0.1187063530087471
-    ],
-    "peak_run": 0.0030308961868286133,
-    "peak_window": 0.0030308961868286133,
-    "status": "inside all run"
-   },
-   "MLP+MLP": {
-    "dP": [
-     0.2447131872177124,
-     0.11378959566354752
-    ],
-    "peak_run": 0.002063930034637451,
-    "peak_window": 0.002063930034637451,
-    "status": "inside all run"
-   }
-  },
-  "file": "compare_out_common_s42\\trajectories\\load_sc9238_G1"
  },
  {
   "scenario": 8755,
@@ -134,8 +76,8 @@
    },
    "MLP+MLP": {
     "dP": [
-     0.0015455890679731965,
-     -0.0008450772729702294
+     0.0015455899992957711,
+     -0.0008451257017441094
     ],
     "peak_run": 0.00047206878662109375,
     "peak_window": 0.00036537647247314453,
@@ -143,34 +85,5 @@
    }
   },
   "file": "compare_out_common_s42\\trajectories\\line_sc8755_G5"
- },
- {
-  "scenario": 6958,
-  "type": "line",
-  "t_decision": 1.4506122864935547,
-  "generator": 6,
-  "needed_rescue": false,
-  "peak_free_run": 0.0003440380096435547,
-  "models": {
-   "LSTM+LSTM": {
-    "dP": [
-     0.0032007137779146433,
-     0.004538642708212137
-    ],
-    "peak_run": 0.00041604042053222656,
-    "peak_window": 0.00025331974029541016,
-    "status": "inside all run"
-   },
-   "MLP+MLP": {
-    "dP": [
-     0.010796478018164635,
-     -0.005079776048660278
-    ],
-    "peak_run": 0.0003886222839355469,
-    "peak_window": 0.0002549886703491211,
-    "status": "inside all run"
-   }
-  },
-  "file": "compare_out_common_s42\\trajectories\\line_sc6958_G6"
  }
 ]
