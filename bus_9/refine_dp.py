@@ -299,16 +299,75 @@ val_bs = min(args.batch_size, args.val_instants)
 n_val_batches = max(1, args.val_instants // val_bs)
 
 
+# ── speedups (2026-10-22): val-cache + background batch prefetch ─────────────
+# (1) evaluate() re-seeds its rng every call, so the SAME val batches are
+#     rebuilt identically each epoch. Build the CPU-side batches once and
+#     reuse them; .to(device) per call keeps GPU tensors correct.
+# (2) One worker thread builds batch i+1's numpy features while batch i runs
+#     on the GPU. Each batch's rng is a child stream of rng_b with seeds
+#     pre-drawn up front → the schedule is deterministic per --seed (not
+#     bit-identical to the serial schedule, but reproducible run to run).
+import queue as _queue
+from concurrent.futures import ThreadPoolExecutor as _TPE
+
+VALCACHE = {}
+
+def _val_batches(pool):
+    b = VALCACHE.get(id(pool))
+    if b is None:
+        rng_v = np.random.default_rng(12345)
+        b = []
+        for _ in range(n_val_batches):
+            ks_b = rng_v.choice(pool, val_bs, replace=True)
+            b.append(make_batch(ks_b, rng_v))
+        VALCACHE[id(pool)] = b
+    return b
+
+
+class _Prefetcher:
+    def __init__(self):
+        self.ex = _TPE(max_workers=1)
+        self.q = _queue.deque()
+        self.seeds = [int(rng_b.integers(0, 2**63 - 1)) for _ in range(n_batches)]
+        self.order = None
+        self.i = 0
+
+    def _submit(self, bi):
+        if bi >= n_batches:
+            self.q.append(None)   # end-of-schedule marker; next() returns None
+            return
+        ks_b = self.order[bi * args.batch_size:(bi + 1) * args.batch_size]
+        if not len(ks_b):
+            self.q.append(None)
+            return
+        seed, ks_ = self.seeds[bi], ks_b
+        self.q.append(self.ex.submit(
+            lambda s=seed, k=ks_: make_batch(k, np.random.default_rng(s))))
+
+    def start(self):
+        for _ in range(2):
+            self._submit(self.i)
+            self.i += 1
+
+    def next(self):
+        f = self.q.popleft()
+        r = f.result() if f is not None else None
+        self._submit(self.i)
+        self.i += 1
+        return r
+
+    def close(self):
+        self.ex.shutdown(wait=False)
+
+
 @torch.no_grad()
 def evaluate(pool):
     model.eval()
-    rng_v = np.random.default_rng(12345)
     hit = n_need = 0; norm_s = norm_n = 0.0
     ok_hit = ok_n = 0
     age_hit = [0] * len(AGE_BINS); age_n = [0] * len(AGE_BINS)
-    for _ in range(n_val_batches):
-        ks_b = rng_v.choice(pool, val_bs, replace=True)
-        feat, x_meas, fut, vmask, age, active, ks = to_dev(make_batch(ks_b, rng_v))
+    for batch in _val_batches(pool):
+        feat, x_meas, fut, vmask, age, active, ks = to_dev(batch)
         o = model(feat, x_meas, hard=True, ctrl=True, vmask=vmask)
         pk_t, has = model.judged(fut[:, :, 0:3], vmask)
         pk_c, has_c = model.judged(o['w_ctrl'], vmask)
@@ -359,15 +418,21 @@ print(f"Epoch = {len(epoch_units)} decision instants "
       f"= {n_batches} batches   |   validation: {n_val_batches * val_bs} "
       f"fixed instants each epoch")
 
+pf = _Prefetcher()
+order = rng_b.permutation(epoch_units)
+pf.order = order
+pf.start()
 for epoch in range(1, args.epochs + 1):
     prog.epoch_start()
-    order = rng_b.permutation(epoch_units)
+    if epoch > 1:
+        order = rng_b.permutation(epoch_units)
+        pf.order = order
     agg = dict(norm=0., fail=0., n=0)
     for bi in range(n_batches):
-        ks_b = order[bi * args.batch_size:(bi + 1) * args.batch_size]
-        if not len(ks_b):
+        got = pf.next()
+        if got is None:
             continue
-        feat, x_meas, fut, vmask, age, active, ks = to_dev(make_batch(ks_b, rng_b))
+        feat, x_meas, fut, vmask, age, active, ks = to_dev(got)
         opt.zero_grad(set_to_none=True)
         o = model(feat, x_meas, ctrl=True, vmask=vmask)
         pk_c, has_c = model.judged(o['w_ctrl'], vmask)
