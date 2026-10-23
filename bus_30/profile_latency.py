@@ -44,6 +44,8 @@ ap.add_argument('--graph', action='store_true', default=False,
                      ' the verdict table is eager vs graph side by side).')
 ap.add_argument('--n_roll', type=int, default=None,
                 help='override the rollout step count (horizon shrinks to match)')
+ap.add_argument('--dt_roll', type=float, default=None,
+                help='override the rollout physics step (horizon = n_roll x dt_roll)')
 ap.add_argument('--n_refine', type=int, default=None,
                 help='override the cascade refinement count')
 ap.add_argument('--out', default='profile_latency_out')
@@ -91,6 +93,8 @@ model = RolloutController(
 model.load_state_dict(ck['model'])
 if args.n_roll:
     model.n_steps = args.n_roll          # horizon = n_roll * dt_roll
+if args.dt_roll:
+    model.dt_roll = args.dt_roll
 if args.n_refine is not None:
     model.n_refine = args.n_refine
 model.eval()
@@ -418,7 +422,9 @@ if args.graph:
                 g.replay()
             sync()
             ms = (time.perf_counter() - t) / args.reps * 1000
-            tag = (f'_roll{args.n_roll}' if args.n_roll else '') + (f'_ref{args.n_refine}' if args.n_refine is not None else '')
+            tag = ((f'_roll{args.n_roll}' if args.n_roll else '') +
+        (f'_dt{args.dt_roll}' if args.dt_roll else '') +
+        (f'_ref{args.n_refine}' if args.n_refine is not None else ''))
             results.setdefault(bs, {}).update(
                 **{f'graph_decision_ms{tag}': ms, f'graph_maxdiff{tag}': dmax,
                    f'eager_ms{tag}': EAGER_MS},
