@@ -73,6 +73,9 @@ ap.add_argument('--n_refine', type=int, default=None,
 ap.add_argument('--n_roll', type=int, default=None,
                 help='override the controller rollout steps (default: ckpt horizon);'
                      ' the TRUE-dynamics rescue judgment window is unchanged')
+ap.add_argument('--dt_roll', type=float, default=None,
+                help='override the controller rollout step (samples become'
+                     ' dt_roll-spaced; horizon = n_roll x dt_roll)')
 ap.add_argument('--cuda_graph', action='store_true',
                 help='Capture the 1600-step true-dynamics RK4 loop into a CUDA '
                      'graph and replay it per batch (launch-bound otherwise). '
@@ -109,10 +112,16 @@ VM_IDX = list(range(15, 33, 2)); TH_IDX = list(range(16, 33, 2))
 FUT_IDX = [1, 3, 5, 6, 7, 8]
 W_STEPS = ck['w_steps']
 W_STRIDE = int(round(A['dt_window'] / DT))
-ROLL_STRIDE = int(round(A['dt_roll'] / DT))
+DT_ROLL_EFF = A['dt_roll'] if args.dt_roll is None else args.dt_roll
+ROLL_STRIDE = int(round(DT_ROLL_EFF / DT))
 N_ROLL_CFG = int(round(A['horizon'] / A['dt_roll']))
-N_ROLL = N_ROLL_CFG if args.n_roll is None else args.n_roll
-HORIZON_EFF = A['horizon'] if args.n_roll is None else N_ROLL * A['dt_roll']
+if args.n_roll is not None:
+    N_ROLL = args.n_roll
+elif args.dt_roll is not None:
+    N_ROLL = int(round(A['horizon'] / DT_ROLL_EFF))   # keep horizon, change spacing
+else:
+    N_ROLL = N_ROLL_CFG
+HORIZON_EFF = N_ROLL * DT_ROLL_EFF
 N_REFINE_EFF = A.get('n_refine', 3) if args.n_refine is None else args.n_refine
 TYPE_NAMES = ['gen', 'load', 'line']
 AGE_BINS = [(0.0, 0.05), (0.05, 0.1), (0.1, 0.2), (0.2, 0.5), (0.5, 1e9)]
@@ -124,7 +133,7 @@ enc = FaultEncoder(ck['n_feat'], w_max_steps=W_STEPS, dt_window=A['dt_window'],
                    max_window=A['w_max'], beta0=A['beta0'],
                    encoder=A.get('encoder', 'lstm'),
                    mlp_proj=A.get('mlp_proj'))
-model = RolloutController(S, enc, horizon=HORIZON_EFF, dt_roll=A['dt_roll'],
+model = RolloutController(S, enc, horizon=HORIZON_EFF, dt_roll=DT_ROLL_EFF,
                           omega_limit=OMEGA_LIMIT, margin=A.get('margin', 1e-4),
                           dp_head=A.get('dp_head', 'linear'),
                           dp_hidden=A.get('dp_hidden', 128),
@@ -162,7 +171,7 @@ def make_batch(ks, rng, tk_fixed=None):
         blk = np.asarray(X[k, i0:ie + N_ROLL * ROLL_STRIDE + 1])
         o = ie - i0
         win[j] = blk[0:o + 1:W_STRIDE]
-        fut[j] = blk[o::ROLL_STRIDE][:N_ROLL + 1][:, FUT_IDX]
+        fut[j] = blk[o::ROLL_STRIDE][:N_ROLL + 1][:, FUT_IDX]   # spacing = DT_ROLL_EFF
     d = win[..., D_IDX]; w = win[..., W_IDX]; pm = win[..., PM_IDX]
     th = win[..., TH_IDX]
     feat = np.concatenate([d[..., 1:] - d[..., :1], (w - 1.0) / 0.01, pm,
@@ -176,7 +185,7 @@ def make_batch(ks, rng, tk_fixed=None):
     t_change = np.where(active, t_clear[ks],
                         np.where(tk < t_fault[ks], t_fault[ks], np.inf))
     valid_t = np.clip(t_change - tk, 0.0, A['horizon'])
-    step_t = np.arange(N_ROLL + 1) * A['dt_roll']
+    step_t = np.arange(N_ROLL + 1) * DT_ROLL_EFF
     vmask = (step_t[None, :] <= valid_t[:, None]).astype(np.float32)
     return (torch.tensor(feat), torch.tensor(x_meas, dtype=torch.float32),
             torch.tensor(fut), torch.tensor(vmask), ks, tk, valid_t)
