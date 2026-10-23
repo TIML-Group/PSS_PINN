@@ -1,0 +1,120 @@
+Rollout override: dt_roll 10 ms, n_roll 150 (horizon eff 1.50 s), n_refine 3
+Device: cuda
+Loaded case30_ctrl/refined_common/best.pt: epoch 58, window 128.3 ms, mask beta 26.9 ms (from checkpoint), dP head 'cascade', encoder 'lstm', dP cell 'lstm'
+Split from checkpoint: 9000 train / 500 val / 500 test   | feature normalisation: from checkpoint
+Split 'val': 500 scenarios  (gen 154, load 175, line 171)
+D:\Ongoing\PINN\PSS_PINN\bus_30\verify_true30.py:117: UserWarning: Casting complex values to real discards the imaginary part (Triggered internally at D:\b\2.9\pytorch\aten\src\ATen\native\Copy.cpp:309.)
+  traj[:, i + 1] = x[:, NG:2 * NG]; states[:, i + 1] = x
+CUDA graph: 1600 RK4 steps/batch captured
+  256/2048  512/2048  768/2048  1024/2048  1280/2048  1536/2048  1792/2048  2048/2048
+
+======================================================================
+TRUE-DYNAMICS VERIFICATION  (val split, 2048 instants)
+======================================================================
+  cases needing rescue (true dynamics) : 339
+  excluded, no fault active at decision: 6  (1.7% of otherwise-needy cases -- nothing for dP to act on)
+  rescue rate, TRUE dynamics           : 0.7552
+  rescue rate, model's own rollout     : 0.8230
+  the two agree on                     : 89.7% of cases
+  overall ok (true, actionable)        : 0.9271
+  rescue by type (true)                : gen 0.573(n=164)  load 0.942(n=172)  line 0.000(n=3)
+
+  HARMED: healthy without dP, pushed out by it: 1 of 1427 (0.07%)
+
+  judged to END OF RUN (through clearing and ring-down):
+    with dP                            : 0.6608
+    without dP                         : 0.0000
+  dP held until: clear
+  mean ||dP||                          : 0.1271 pu  (needing rescue 0.5796, not needing 0.0373)
+
+  rescue by fault age (true)  0-50ms:0.74(n=72)  50-100ms:0.77(n=79)  100-200ms:0.74(n=145)  200-500ms:0.76(n=29)  500-9999ms:0.86(n=14)
+  rescue by fault age (model) 0-50ms:0.86(n=72)  50-100ms:0.89(n=79)  100-200ms:0.81(n=145)  200-500ms:0.76(n=29)  500-9999ms:0.50(n=14)
+
+----------------------------------------------------------------------
+WHERE DO THE MISSES LIVE?  (339 needy cases, true dynamics)
+----------------------------------------------------------------------
+  type  alpha            n  rescued  mean|dP|  at rail  miss@rail  miss spare
+  gen   0.10-0.30        9    0.778    0.2079     0.0%          0           2
+  gen   0.30-0.50       34    0.735    0.5493     0.0%          0           9
+  gen   0.50-0.70       36    0.639    0.9887     2.8%          0          13
+  gen   0.70-0.90       47    0.532    0.8117    34.0%         11          11
+  gen   0.90-1.01       38    0.368    0.9628    60.5%         23           1
+  gen   ALL            164    0.573    0.7980    24.4%         34          36
+  load  0.30-0.50       28    1.000    0.2335     0.0%          0           0
+  load  0.50-0.70       34    1.000    0.3240     0.0%          0           0
+  load  0.70-0.90       68    0.941    0.4118     0.0%          0           4
+  load  0.90-1.01       42    0.857    0.4352     0.0%          0           6
+  load  ALL            172    0.942    0.3711     0.0%          0          10
+  line  0.90-1.01        3    0.000    0.5941     0.0%          0           3
+  line  ALL              3    0.000    0.5941     0.0%          0           3
+
+  GENERATOR TRIPS: 70 of 164 needy cases missed (rescue 0.5732)
+    dP at the rail (>=0.95 of dp_max):   34  (48.6%)  -> actuator-limited
+    authority to spare                   :   36  (51.4%)  -> head under-corrects
+    mean true alpha: misses 0.750  vs  rescued 0.613
+    -> MIXED: neither cause dominates; both are live.
+
+----------------------------------------------------------------------
+IS p_fail CALIBRATED?  (reachable instants; p_fail is what the control
+loss minimises, so its reliability is the loss's reliability)
+----------------------------------------------------------------------
+
+  ALL REACHABLE  (n = 1138)
+    p_fail bin          n   mean p  model@tgt  model@limit  actual TRUE
+    0.00-0.05         883    0.005      0.000        0.000        0.018
+    0.05-0.10          44    0.072      0.000        0.000        0.114
+    0.10-0.20          24    0.137      0.000        0.000        0.000
+    0.20-0.30          21    0.249      0.000        0.000        0.048
+    0.30-0.50          21    0.389      0.000        0.000        0.048
+    0.50-0.70          21    0.628      1.000        0.000        0.048
+    0.70-0.90          26    0.810      1.000        0.000        0.077
+    0.90-0.95           9    0.923      1.000        0.000        0.000
+    0.95-1.00          89    0.992      1.000        0.719        0.640
+    OVERALL          1138    0.136      0.127        0.056        0.073
+    expected calibration error (vs TRUE): 0.0869
+    expected calibration error (vs its OWN event, peak>tgt): 0.0338
+    confident-safe bin (p<0.05): 883 cases, p=0.005, TRUE failures 0.018 (16 cases)
+
+  NEEDING RESCUE  (n = 339)
+    p_fail bin          n   mean p  model@tgt  model@limit  actual TRUE
+    0.00-0.05         144    0.017      0.000        0.000        0.111
+    0.05-0.10          26    0.075      0.000        0.000        0.192
+    0.10-0.20          17    0.139      0.000        0.000        0.000
+    0.20-0.30          15    0.246      0.000        0.000        0.067
+    0.30-0.50          15    0.392      0.000        0.000        0.067
+    0.50-0.70          14    0.632      1.000        0.000        0.071
+    0.70-0.90          20    0.813      1.000        0.000        0.100
+    0.90-0.95           6    0.914      1.000        0.000        0.000
+    0.95-1.00          82    0.993      1.000        0.732        0.695
+    OVERALL           339    0.379      0.360        0.177        0.245
+    expected calibration error (vs TRUE): 0.2316
+    expected calibration error (vs its OWN event, peak>tgt): 0.0778
+    confident-safe bin (p<0.05): 144 cases, p=0.017, TRUE failures 0.111 (16 cases)
+
+  predicted failure rate (mean p_fail)   : 0.1363
+  model's own rate at its OWN event (tgt): 0.1274   [surrogate error +0.0089]
+  model's own rate at the LIMIT          : 0.0562   [margin offset +0.0712, by design]
+  TRUE failure rate                      : 0.0729   [rollout error -0.0167]
+  net: p_fail vs reality                 : +0.0634
+  -> the SURROGATE is sound: p_fail tracks the event it stands in
+     for. dp_tau needs no change.
+
+  on cases NEEDING RESCUE (the population that matters):
+    model's own failure rate : 0.1770
+    TRUE failure rate        : 0.2448   [rollout error -0.0678]
+  -> the ROLLOUT is optimistic where it counts: the model
+     under-predicts failures on the cases it is meant to save.
+     --margin is the lever; the surrogate is not at fault.
+  -> net effect is CONSERVATIVE (0.136 predicted vs 0.073
+     actual overall), so the objective errs toward over-correcting.
+
+  model-internal minus true = +6.8 points
+  -> the model-internal number is OPTIMISTIC. Raise --margin toward the
+     trajectory RMSE and re-run refinement against a realistic buffer.
+  gen: no scenarios of this type in split 'val' with a usable fault time -- nothing to plot
+  load: no scenarios of this type in split 'val' with a usable fault time -- nothing to plot
+  line: no scenarios of this type in split 'val' with a usable fault time -- nothing to plot
+
+plotting 0 cases ...
+
+-> case30_ctrl/refined_common/verify_dt010/verify_results.json
