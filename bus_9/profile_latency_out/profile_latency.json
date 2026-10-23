@@ -89,6 +89,15 @@
   "graph_decision_ms": 126.62305166656249,
   "graph_maxdiff": 4.0940940380096436e-06,
   "eager_ms": 464.88837500000955,
-  "rollout_calls": 4
+  "rollout_calls": 4,
+  "graph_decision_ms_ref2": 96.76498500011803,
+  "graph_maxdiff_ref2": 0.00017122365534305573,
+  "eager_ms_ref2": 464.88837500000955,
+  "graph_decision_ms_roll75": 64.25843166677319,
+  "graph_maxdiff_roll75": 1.055002212524414e-05,
+  "eager_ms_roll75": 464.88837500000955,
+  "graph_decision_ms_roll75_ref2": 49.14504833335134,
+  "graph_maxdiff_roll75_ref2": 3.844499588012695e-06,
+  "eager_ms_roll75_ref2": 464.88837500000955
  }
 }

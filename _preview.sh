@@ -1,0 +1,2 @@
+cd /mnt/d/Ongoing/PINN/PSS_PINN/bus_9 && ../.venv/Scripts/python.exe -u compare_models.py --ckpt receding_cascade/refined/best.pt --ckpt receding_fullmlp/refined/best.pt --data data_mm --split test --n 4096 --n_true 2048 --batch 256 --seed 42 --instants-file compare_out_s42/instants.json --out compare_out_s42 --plots_per_type 0
+echo PREVIEW-DONE
