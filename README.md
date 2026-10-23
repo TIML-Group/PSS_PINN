@@ -39,6 +39,7 @@ The architecture is trained on two systems:
 - [Running the 9-bus pipeline](#running-the-9-bus-pipeline)
 - [Running the 30-bus pipeline](#running-the-30-bus-pipeline)
 - [Ablation: LSTM vs size-matched MLP](#ablation-lstm-vs-size-matched-mlp)
+- [Latency and CUDA-graph capture](#latency-and-cuda-graph-capture)
 - [Evaluation protocol](#evaluation-protocol)
 - [Results](#results)
 - [Known issues and limitations](#known-issues-and-limitations)
@@ -118,8 +119,9 @@ the hold-policy study in [Results](#results)).
 │   ├── pinn_model.py               FaultEncoder + RolloutController
 │   ├── convert_dataset.py          .mat → scenario-major float32 memmap
 │   ├── train_receding.py           training
-│   ├── refine_dp.py                constrained ||ΔP|| minimisation (stage 3)
-│   ├── verify_true.py              true-dynamics verification (stage 4)
+│   ├── refine_dp.py                constrained ||ΔP|| minimisation (stage 3, --cuda_graph)
+│   ├── profile_latency.py          whole-decision latency profiler (eager vs graph, dt sweeps)
+│   ├── verify_true.py              true-dynamics verification (stage 4, --cuda_graph)
 │   ├── check_refined.py            refinement provenance check (tensor diff vs original)
 │   ├── diagnose_dp.py              head vs oracle vs feasibility ceiling
 │   ├── alpha_residual.py           signed severity error by fault type
@@ -140,8 +142,9 @@ the hold-policy study in [Results](#results)).
     ├── pinn_model30.py             FaultEncoder + RolloutController, 30-bus dimensions
     ├── train_case30.py             training
     ├── case30_common.py            shared loader, batch builder, actionability gate
-    ├── refine_dp30.py              constrained ||ΔP|| minimisation (stage 3)
-    ├── verify_true30.py            true-dynamics verification + reliability diagram
+    ├── refine_dp30.py              constrained ||ΔP|| minimisation (stage 3, --cuda_graph)
+    ├── profile_latency.py          whole-decision latency profiler (eager vs graph)
+    ├── verify_true30.py            true-dynamics verification + reliability diagram (--cuda_graph)
     ├── diagnose_dp30.py            head vs oracle vs feasibility ceiling
     ├── alpha_residual30.py         signed severity error by fault type
     └── compare_models.py           cross-architecture comparison, bootstrap CIs
@@ -149,10 +152,13 @@ the hold-policy study in [Results](#results)).
 
 Each folder is self-contained. Run its scripts from inside that folder: the
 default paths to the `.mat` support files are relative to the working
-directory. (An unused system-agnostic draft — `power_system.py`,
-`psys_physics.py`, `system_io.py`, `verify_physics.py` — is not part of either
-pipeline; `cross_validation_datagen_governor.py` is a confirmed remnant kept
-only because the `.mat` exporters import its constants.)
+directory. `bus_30/verify_physics.py` imports the generic `psys_physics.py`
+module and asserts that `PowerSystem.ieee9()` reproduces
+`bus_9/ieee9_physics.py` bit-for-bit — the 9-bus-specific module and the
+system-agnostic one are kept equivalent by that check, and both carry the
+capture-safe batched solver used by `--cuda_graph` training.
+`cross_validation_datagen_governor.py` is a confirmed remnant kept only
+because the `.mat` exporters import its constants.
 
 The 30-bus post-training scripts (`refine_dp30.py`, `diagnose_dp30.py`,
 `verify_true30.py`) all import their batch builder and actionability gate
@@ -263,6 +269,8 @@ python diagnose_dp.py --ckpt receding_cascade/best.pt --data data_mm --n 512 --s
 
 # 4. minimise ||ΔP|| at constant rescue rate
 python refine_dp.py --ckpt receding_cascade/best.pt --data data_mm --floor_tol 0
+#    add --cuda_graph for a 2-4x faster refinement step (launch-overhead bound;
+#    identical schedule and losses, see "Latency and CUDA-graph capture")
 
 # 5. check the emitted ΔP in the true dynamics, and plot
 python verify_true.py --ckpt receding_cascade/refined/best.pt --data data_mm --n 2048 --plots_per_type 3
@@ -315,6 +323,7 @@ python train_case30.py --data data30_mm --out case30_ctrl --init case30_v3/best.
 # 5. post-training
 python diagnose_dp30.py --ckpt case30_ctrl/best.pt --data data30_mm
 python refine_dp30.py   --ckpt case30_ctrl/best.pt --data data30_mm --floor_tol 0
+#    add --cuda_graph for the graph-captured training step (2.3x measured)
 #    note: --warmup 40 (default) holds patience until the multiplier has decayed;
 #    on the 9-bus the refinement needed --lam0 1.0 --lam_eta 30 to bind at all
 python verify_true30.py --ckpt case30_ctrl/refined/best.pt --data data30_mm --split test
@@ -532,6 +541,45 @@ it, as a new control policy). Without ΔP the end-of-run rate is 0.000.
 | Trained head | 0.9217 | 0.600 pu |
 | Oracle, same objective | 0.8916 | 0.517 pu |
 | Feasible, no effort penalty | 0.9398 | 0.728 pu |
+
+---
+
+## Latency and CUDA-graph capture
+
+The decision latency matters for a deployed controller: the unrolled 150-step
+RK4 rollout plus the 3-round cascade ΔP head submit thousands of tiny
+kernels, so the *eager* step is launch-bound — batch size barely matters
+(447.6 ms at batch 1, 464.9 ms at batch 256 on the 9-bus).
+
+Two independent fixes ship in the repo:
+
+1. **Whole-decision CUDA-graph capture** (`profile_latency.py --graph`, and
+   `--cuda_graph` on `refine_dp*.py` / `verify_true*.py`): replay of the whole
+   decision removes launch overhead entirely on ROCm/HIP.
+   - At the baseline spacing (dt_roll = 10 ms): eager 126.6 ms → graph replay
+     **20.0 ms** (7×) at batch 256 on the 9-bus; 126.6 → 96.8 ms with
+     `n_refine 2`; 64.3 ms with `n_roll 75`; 49.1 ms with both.
+   - The refine *training* step is graph-captured too: the 9-bus refines at
+     ~17 s/epoch vs ~57 s eager (3.4×), the 30-bus at 2.3× on a 3-epoch A/B.
+   - Same-seed graph reruns are bit-identical; vs eager, rescue differs ≤0.7 pt
+     and ‖ΔP‖ ≤2% (the capture-safe batched solver — plain `linalg.solve`
+     cannot run inside an ROCm capture — introduces ~1.6e-5 ΔP noise that
+     flips borderline rescue cases at float32). **Reported paper numbers come
+     from the eager exact-solve paths**, which are untouched.
+2. **Sample-spacing lever** (`--dt_roll`): rescue is invariant across dt_roll
+   5–210 ms at fixed horizon (checked to four decimals); the RK4 stability
+   edge sits at 213 ms and the operating point at dt = 100 ms, where the
+   whole-decision graph replay is **20.0 ms** with rescue 0.9003 — the
+   spacing + graph levers compound near-multiplicatively.
+   `verify_true*.py --dt_roll_override` re-scores any checkpoint at another
+   spacing (30-bus dt=100 ms test split: ω RMSE +1.6%).
+
+Capture on ROCm/Windows needs the pitfalls the scripts already handle
+(large-stack capture thread, capture-safe solver, λ via a device tensor,
+`os._exit` shutdown); see the module docstrings of `refine_dp.py` and
+`case30_physics.py` for the full list. `train_*.py` are NOT graph-captured
+(the `--ctrl_start` phase flip changes the backward graph mid-run); port
+pending unless a retrain happens.
 
 ---
 
