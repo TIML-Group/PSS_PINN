@@ -68,6 +68,11 @@ ap.add_argument('--instants-file', default=None,
                      '<out>/instants.json (shared scenarios); '
                      'requires matching --n and --split.')
 ap.add_argument('--seed', type=int, default=11)
+ap.add_argument('--n_refine', type=int, default=None,
+                help='override the cascade head refinement count (default: ckpt)')
+ap.add_argument('--n_roll', type=int, default=None,
+                help='override the controller rollout steps (default: ckpt horizon);'
+                     ' the TRUE-dynamics rescue judgment window is unchanged')
 ap.add_argument('--cuda_graph', action='store_true',
                 help='Capture the 1600-step true-dynamics RK4 loop into a CUDA '
                      'graph and replay it per batch (launch-bound otherwise). '
@@ -105,7 +110,10 @@ FUT_IDX = [1, 3, 5, 6, 7, 8]
 W_STEPS = ck['w_steps']
 W_STRIDE = int(round(A['dt_window'] / DT))
 ROLL_STRIDE = int(round(A['dt_roll'] / DT))
-N_ROLL = int(round(A['horizon'] / A['dt_roll']))
+N_ROLL_CFG = int(round(A['horizon'] / A['dt_roll']))
+N_ROLL = N_ROLL_CFG if args.n_roll is None else args.n_roll
+HORIZON_EFF = A['horizon'] if args.n_roll is None else N_ROLL * A['dt_roll']
+N_REFINE_EFF = A.get('n_refine', 3) if args.n_refine is None else args.n_refine
 TYPE_NAMES = ['gen', 'load', 'line']
 AGE_BINS = [(0.0, 0.05), (0.05, 0.1), (0.1, 0.2), (0.2, 0.5), (0.5, 1e9)]
 
@@ -116,12 +124,12 @@ enc = FaultEncoder(ck['n_feat'], w_max_steps=W_STEPS, dt_window=A['dt_window'],
                    max_window=A['w_max'], beta0=A['beta0'],
                    encoder=A.get('encoder', 'lstm'),
                    mlp_proj=A.get('mlp_proj'))
-model = RolloutController(S, enc, horizon=A['horizon'], dt_roll=A['dt_roll'],
+model = RolloutController(S, enc, horizon=HORIZON_EFF, dt_roll=A['dt_roll'],
                           omega_limit=OMEGA_LIMIT, margin=A.get('margin', 1e-4),
                           dp_head=A.get('dp_head', 'linear'),
                           dp_hidden=A.get('dp_hidden', 128),
                           dp_fc_layers=A.get('dp_fc_layers', 2),
-                          n_refine=A.get('n_refine', 3),
+                          n_refine=N_REFINE_EFF,
                           dp_cell=A.get('dp_cell', 'lstm')).to(device)
 model.load_state_dict(ck['model']); model.eval()
 # beta is restored by load_state_dict above. Forcing A['beta_min'] here would
