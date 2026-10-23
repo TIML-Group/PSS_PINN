@@ -42,6 +42,10 @@ ap.add_argument('--graph', action='store_true', default=False,
                 help='Capture the whole decision forward into ONE CUDA graph per'
                      ' batch size and re-time it (eager numbers stay measured so'
                      ' the verdict table is eager vs graph side by side).')
+ap.add_argument('--n_roll', type=int, default=None,
+                help='override the rollout step count (horizon shrinks to match)')
+ap.add_argument('--n_refine', type=int, default=None,
+                help='override the cascade refinement count')
 ap.add_argument('--out', default='profile_latency_out')
 args = ap.parse_args()
 
@@ -68,7 +72,8 @@ A = ck['args']
 W_STEPS = int(ck['w_steps'])
 W_STRIDE = int(round(A['dt_window'] / DT))
 ROLL_STRIDE = int(round(A['dt_roll'] / DT))
-N_ROLL = int(round(A['horizon'] / A['dt_roll']))
+N_ROLL_CFG = int(round(A['horizon'] / A['dt_roll']))
+N_ROLL = N_ROLL_CFG
 GRACE_STEPS = int(round(0.2 / A['dt_roll']))
 
 enc = FaultEncoder(int(ck['n_feat']), w_max_steps=W_STEPS,
@@ -84,6 +89,10 @@ model = RolloutController(
     dp_fc_layers=A.get('dp_fc_layers', 2), dp_cell=A.get('dp_cell', 'lstm'),
     alpha_lo=A.get('alpha_lo', 0.10), alpha_hi=A.get('alpha_hi', 1.00)).to(device)
 model.load_state_dict(ck['model'])
+if args.n_roll:
+    model.n_steps = args.n_roll          # horizon = n_roll * dt_roll
+if args.n_refine is not None:
+    model.n_refine = args.n_refine
 model.eval()
 
 # ------------------------------------------------------------------- batch --
@@ -117,6 +126,8 @@ def make_batch(bs, rng):
     t_change = np.where(active, tc, np.where(tk < tf, tf, np.inf))
     valid_t = np.clip(t_change - tk, 0.0, A['horizon'])
     step_t = np.arange(N_ROLL + 1) * A['dt_roll']
+    n_roll_eff = int(getattr(model, 'n_steps', N_ROLL_CFG))
+    step_t = np.arange(n_roll_eff + 1) * A['dt_roll']
     vmask = (step_t[None, :] <= valid_t[:, None]).astype(np.float32)
     T = lambda a, dt=None: torch.tensor(a, dtype=dt).to(device)
     return dict(feat=T(feat), x_meas=T(x_meas, torch.float32), vmask=T(vmask),
@@ -407,8 +418,10 @@ if args.graph:
                 g.replay()
             sync()
             ms = (time.perf_counter() - t) / args.reps * 1000
+            tag = (f'_roll{args.n_roll}' if args.n_roll else '') + (f'_ref{args.n_refine}' if args.n_refine is not None else '')
             results.setdefault(bs, {}).update(
-                graph_decision_ms=ms, graph_maxdiff=dmax,
+                **{f'graph_decision_ms{tag}': ms, f'graph_maxdiff{tag}': dmax,
+                   f'eager_ms{tag}': EAGER_MS},
                 eager_ms=EAGER_MS, rollout_calls=4)
             print(f'  batch {bs}: graph replay = {ms:.3f} ms | eager = {EAGER_MS:.1f} ms'
                   f' | speedup {EAGER_MS/ms:.0f}x | max|diff| {dmax:.2e}   \n')

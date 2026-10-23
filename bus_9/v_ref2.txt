@@ -1,0 +1,23 @@
+ckpt: receding_cascade/refined_common/best.pt   encoder: lstm   dp_head: cascade   n_refine: 2   N_ROLL: 150   device: cuda
+
+(loaded eager results from profile_latency_out/profile_latency.json; graph pass only)
+section         batch  ms median   p90 ms launches µs GPU busy   MFLOPs µs/launch
+enc                 1      0.575    0.643      0.0        22.3     0.93       nan
+net                 1      1.077    1.200      0.0         8.0     0.03       nan
+w_free              1      0.138    0.237      0.0       720.0     0.08       nan
+cascade_full        1      1.206    1.385      0.0      2941.9     0.00       nan
+SUM(sections)       1      2.995
+full forward        1    447.566   (end-to-end, synced)
+
+enc               256      3.628    4.764      0.0        27.9     0.93       nan
+net               256      1.126    1.190      0.0         9.1     0.03       nan
+w_free            256      0.108    1.112      0.0       785.9     0.08       nan
+cascade_full      256      1.256    1.368      0.0      3130.1     0.00       nan
+SUM(sections)     256      6.118
+full forward      256    464.888   (end-to-end, synced)
+
+
+-- whole-decision CUDA-graph capture --
+  batch 256: graph replay = 96.765 ms | eager = 464.9 ms | speedup 5x | max|diff| 1.71e-04   
+
+-> profile_latency_out/profile_latency.json
