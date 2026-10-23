@@ -395,6 +395,14 @@ for epoch in range(1, args.epochs + 1):
                     break
                 except (ValueError, OverflowError):
                     continue
+            # Snapshot model + optimizer state BEFORE the warmup: warmup runs
+            # the full _step() (including opt.step()) 4 extra times on this
+            # batch, which would advance the training schedule by 3 steps
+            # relative to the eager path and break the step-for-step A/B
+            # equivalence with the non-graph run. Restore afterwards and REPLAY
+            # this batch through the graph like every other batch.
+            import copy as _copy
+            _snap_model = _copy.deepcopy(model.state_dict())
             th_ = _th.Thread(target=_capture)
             th_.start(); th_.join()
             _th.stack_size(old_stack)
@@ -402,9 +410,21 @@ for epoch in range(1, args.epochs + 1):
                 raise RuntimeError('CUDA graph capture failed on the worker thread')
             cg_graph = holder['graph']
             cg_out = holder['out']
-            # the captured forward/backward/step already ran on THIS batch;
-            # skip its replay and fall through to the agg update.
-            captured_this_batch = True
+            model.load_state_dict(_snap_model)
+            # Restore Adam to its PRE-warmup state = empty. The state tensors
+            # already exist now (warmup stepped 4x) and the captured graph's
+            # kernels reference their storage, so they must be zeroed IN PLACE
+            # — never replaced via opt.load_state_dict (that assigns new
+            # buffers and the graph would keep updating the orphaned ones).
+            # step=0 + exp_avg=0 + exp_avg_sq=0 is exactly the state before the
+            # first optimizer step.
+            for p in trainable:
+                st = opt.state.get(p)
+                if st:
+                    for v in st.values():
+                        if torch.is_tensor(v):
+                            v.zero_()
+            captured_this_batch = False
 
         if CG and cg_graph is not None and full_batch:
             if not captured_this_batch:   # capture batch: its step already ran
