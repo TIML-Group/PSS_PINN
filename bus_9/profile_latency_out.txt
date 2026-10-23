@@ -1,0 +1,30 @@
+ckpt: receding_cascade/refined_common/best.pt   encoder: lstm   dp_head: cascade   n_refine: 3   N_ROLL: 150   device: cuda
+
+section         batch  ms median   p90 ms launches µs GPU busy   MFLOPs µs/launch
+enc                 1      0.575    0.643      0.0        22.3     0.93       nan
+net                 1      1.077    1.200      0.0         8.0     0.03       nan
+w_free              1      0.138    0.237      0.0       720.0     0.08       nan
+cascade_full        1      1.206    1.385      0.0      2941.9     0.00       nan
+SUM(sections)       1      2.995
+full forward        1    455.518   (end-to-end measured)
+
+enc               256      3.628    4.764      0.0        27.9     0.93       nan
+net               256      1.126    1.190      0.0         9.1     0.03       nan
+w_free            256      0.108    1.112      0.0       785.9     0.08       nan
+cascade_full      256      1.256    1.368      0.0      3130.1     0.00       nan
+SUM(sections)     256      6.118
+full forward      256    458.705   (end-to-end measured)
+
+
+-- synced per-phase attribution  @batch 1  (4 rollout calls/decision) --
+  rollout       435.28 ms   ( 97.3 %)
+  enc             6.60 ms   (  1.5 %)
+  net             1.46 ms   (  0.3 %)
+  TOTAL         447.57 ms   unaccounted 4.2 ms
+
+-- synced per-phase attribution  @batch 256  (4 rollout calls/decision) --
+  rollout       449.14 ms   ( 96.6 %)
+  enc            19.48 ms   (  4.2 %)
+  net             3.06 ms   (  0.7 %)
+  TOTAL         464.89 ms   unaccounted -6.8 ms
+-> profile_latency_out/profile_latency.json
