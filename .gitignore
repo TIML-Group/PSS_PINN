@@ -20,3 +20,14 @@ dashboard.log
 # throwaway verify runs + cached json from 2026-10-22 before/after measurement
 receding_*__*_verify/
 _verify_before_after_test.json
+
+# scratch run-scripts + raw stdout logs (agent/session helpers, not for the repo)
+_*.sh
+_*.py
+bus_9/_*.sh
+bus_30/_*.sh
+bus_30/_*.py
+bus_9/out_dt*.txt
+bus_9/profile_latency_out*.txt
+bus_9/v_*.txt
+bus_30/ab_*.log

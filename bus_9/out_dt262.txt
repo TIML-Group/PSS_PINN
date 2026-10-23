@@ -1,70 +1,0 @@
-=== VERIFY dt=0.262 n_roll=6 ===
-Device: cuda
-Loaded receding_cascade/refined_common/best.pt (epoch 76, dP head 'cascade')
-Split 'val': 500 scenarios  (gen 154, load 175, line 171)
-D:\Ongoing\PINN\PSS_PINN\bus_9\verify_true.py:370: UserWarning: Casting complex values to real discards the imaginary part (Triggered internally at D:\b\2.9\pytorch\aten\src\ATen\native\Copy.cpp:309.)
-  traj[:, i + 1] = x[:, 3:6]; states[:, i + 1] = x
-CUDA graph: 1600 RK4 steps/batch captured
-  256/2048  512/2048  768/2048  1024/2048  1280/2048  1536/2048  1792/2048  2048/2048
-
-======================================================================
-TRUE-DYNAMICS VERIFICATION  (validation split, 2048 instants)
-======================================================================
-  cases needing rescue (true dynamics) : 391
-  excluded, no fault active at decision: 22  (5.3% of otherwise-needy cases -- nothing for dP to act on)
-  rescue rate, TRUE dynamics           : 0.3350
-  rescue rate, model's own rollout     : 0.0639
-  the two agree on                     : 70.8% of cases
-  overall ok (true, reachable)         : 0.6743
-
-  judged to END OF RUN (through clearing and ring-down):
-    with dP                            : 0.2916
-    without dP                         : 0.0000
-  dP held until: clear
-  mean ||dP||                          : 0.1680 pu
-
-  rescue by fault age   0-50ms:0.23/0.00(n=77)  50-100ms:0.33/0.03(n=87)  100-200ms:0.35/0.08(n=167)  200-500ms:0.28/0.13(n=39)  500-9999ms:0.71/0.19(n=21)
-  (true / model-internal)
-
-  model-internal minus true = -27.1 points
-  -> the model-internal number is OPTIMISTIC. Raise --margin toward the
-     trajectory RMSE and re-run refinement against a realistic buffer.
-  gen: 3 case(s), 3 needing rescue
-  load: 3 case(s), 3 needing rescue
-  line: 3 case(s), 0 needing rescue
-
-plotting 9 cases ...
-  receding_cascade/refined_common/verify_dt262\plots\gen_sc5444_t3.07.png
-  receding_cascade/refined_common/verify_dt262\plots\gen_sc3087_t1.95.png
-  receding_cascade/refined_common/verify_dt262\plots\gen_sc6857_t2.17.png
-  receding_cascade/refined_common/verify_dt262\plots\load_sc327_t4.02.png
-  receding_cascade/refined_common/verify_dt262\plots\load_sc1505_t3.44.png
-  receding_cascade/refined_common/verify_dt262\plots\load_sc6332_t1.47.png
-  receding_cascade/refined_common/verify_dt262\plots\line_sc6399_t3.05.png
-  receding_cascade/refined_common/verify_dt262\plots\line_sc5165_t3.65.png
-  receding_cascade/refined_common/verify_dt262\plots\line_sc8985_t4.00.png
-
--> receding_cascade/refined_common/verify_dt262/verify_results.json
-=== LATENCY dt=0.262 ===
-ckpt: receding_cascade/refined_common/best.pt   encoder: lstm   dp_head: cascade   n_refine: 3   N_ROLL: 150   device: cuda
-
-section         batch  ms median   p90 ms launches µs GPU busy   MFLOPs µs/launch
-enc               256      1.199    3.658      0.0        39.9     0.93       nan
-net               256      1.788    2.021      0.0        12.4     0.03       nan
-w_free            256      0.206    8.291      0.0        50.4     0.08       nan
-cascade_full      256      0.898    1.644      0.0       309.1     0.00       nan
-SUM(sections)     256      4.091
-full forward      256     38.300   (end-to-end measured)
-
-
--- synced per-phase attribution  @batch 256  (4 rollout calls/decision) --
-  rollout        36.24 ms   ( 62.9 %)
-  enc            12.35 ms   ( 21.4 %)
-  net             2.44 ms   (  4.2 %)
-  TOTAL          57.62 ms   unaccounted 6.6 ms
-
--- whole-decision CUDA-graph capture --
-  batch 256: graph replay = 14.088 ms | eager = 57.6 ms | speedup 4x | max|diff| 1.23e-02   
-
--> profile_latency_out/dt262/profile_latency.json
-VP-dt262-DONE

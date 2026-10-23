@@ -1,1 +1,0 @@
-cd /mnt/d/Ongoing/PINN/PSS_PINN/bus_9 && ../.venv/Scripts/python.exe -u profile_latency.py --graph --n_refine 2 --batch 256 --reps 60 > v_ref2.txt 2>&1; ../.venv/Scripts/python.exe -u profile_latency.py --graph --n_roll 75 --batch 256 --reps 60 > v_roll75.txt 2>&1; echo VARIANTS-DONE
