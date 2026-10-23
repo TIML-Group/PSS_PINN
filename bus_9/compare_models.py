@@ -113,6 +113,11 @@ ap.add_argument('--beta', default='ckpt', choices=['ckpt', 'min'],
 ap.add_argument('--boot', type=int, default=2000, help='bootstrap resamples')
 ap.add_argument('--latency_reps', type=int, default=30)
 ap.add_argument('--seed', type=int, default=11)
+ap.add_argument('--dt_roll', type=float, default=None,
+                help="Override the checkpoint rollout sample time for this run "
+                     "(controller-side only; true-dynamics judgment unchanged). "
+                     "Use with a SINGLE ckpt; multi-model comparisons at mixed "
+                     "spacings are not guarded here.")
 ap.add_argument('--out', default='compare_out')
 ap.add_argument('--instants-file', default=None,
                 help='load KS/TK draw from a json (shared with '
@@ -219,13 +224,16 @@ else:
     class Loaded:
         def __init__(self, path):
             ck = torch.load(path, map_location=device, weights_only=False)
-            A = ck['args']
+            A = dict(ck['args'])
+            if dt_roll_override is not None:
+                A['dt_roll'] = dt_roll_override
             self.ck, self.A, self.S = ck, A, _S9
             self.DT = float(_md['dt_solver'])
             self.W_STEPS = int(ck['w_steps'])
             self.W_STRIDE = int(round(A['dt_window'] / self.DT))
             self.ROLL_STRIDE = int(round(A['dt_roll'] / self.DT))
             self.N_ROLL = int(round(A['horizon'] / A['dt_roll']))
+            self.rollout_note = f"dt_roll={A['dt_roll']}, n_roll={int(round(A['horizon']/A['dt_roll']))}"
             enc = FaultEncoder(int(ck['n_feat']), w_max_steps=self.W_STEPS,
                                dt_window=A['dt_window'],
                                lstm_layers=A.get('lstm_layers', 10),
@@ -321,6 +329,7 @@ for lab, path in specs:
 if len({m.label for m in models}) < len(models):
     sys.exit("two checkpoints have the same label; give them explicit 'label=path'")
 SYS = System(models[0])
+dt_roll_override = vars(args)['dt_roll']
 
 # the models must share the geometry that defines a decision and its judgement
 for key in ('w_max', 'horizon', 'dt_roll', 'dt_window'):
