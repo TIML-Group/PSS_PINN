@@ -101,16 +101,67 @@ class PowerSystem:
         self.Yred_pre, self.Vrec_pre = self.kron_reduce(self.Y_pre.unsqueeze(0))
 
     # ── network ─────────────────────────────────────────────────────────────
+    # Capture-safe batched solve: hipSOLVER (linalg.solve) cannot run inside a
+    # CUDA-graph capture on this ROCm/HIP build ("operation not permitted while
+    # capturing"). Pure-tensor Gaussian elimination with partial pivoting is
+    # graph-recordable; on the 9-bus port forward agreement to linalg.solve was
+    # ~1.4e-6 and gradients to ~4e-6 at float32-complex (B,9,9)x(B,9,3).
+    # Eager consumers keep the exact solver; only CUDA-graph training flips the
+    # flag. Reported paper numbers always come from eager exact-solve paths.
+    solver_capture_safe = False
+
+    def _solve_batched(self, A, Bm):
+        if not self.solver_capture_safe:
+            return torch.linalg.solve(A, Bm)
+        N, Bn = A.shape[1], A.shape[0]
+        aug = torch.cat([A, Bm], dim=2)
+        idr = torch.arange(N, device=A.device).expand(Bn, N)
+        for k in range(N - 1):
+            p = aug[:, k:, k].abs().argmax(dim=1) + k
+            kk, pk = (torch.full_like(p, k)).unsqueeze(1), p.unsqueeze(1)
+            vk, vp = idr.gather(1, kk), idr.gather(1, pk)
+            swap = idr.clone()
+            swap.scatter_(1, kk, vp)
+            swap.scatter_(1, pk, vk)
+            aug = aug.gather(1, swap.unsqueeze(2).expand(Bn, N, aug.shape[2]))
+            piv = aug[:, k, k].reshape(-1, 1, 1)
+            factor = aug[:, k + 1:, k].unsqueeze(2) / piv
+            aug = torch.cat([aug[:, :k + 1, :],
+                             aug[:, k + 1:, :] - factor * aug[:, k:k + 1, :]],
+                            dim=1)
+        xs = None
+        for k in range(N - 1, -1, -1):
+            rhs = aug[:, k, N:]
+            if xs is None:
+                x = (rhs / aug[:, k, k].unsqueeze(1)).unsqueeze(1)
+            else:
+                s_ = (aug[:, k, k + 1:N].unsqueeze(2) * xs).sum(1)
+                x = torch.cat([((rhs - s_) / aug[:, k, k].unsqueeze(1)).unsqueeze(1), xs], 1)
+            xs = x
+        return xs
+
     def kron_reduce(self, Y):
-        """Y: (B,NB,NB) complex -> Yred (B,NG,NG), Vrec (B,NB,NG)."""
+        """
+        Y: (B,NB,NB) complex -> Yred (B,NG,NG), Vrec (B,NB,NG). Differentiable in Y.
+        idx/arange are constants; caching them avoids host->device tensor copies
+        inside the forward, which are illegal while a CUDA graph records
+        (HIP: operation not permitted when stream is capturing).
+        """
         Bn = Y.shape[0]
         yg = 1.0 / (1j * self.Xdp.to(self.cdtype))
+        if not hasattr(self, '_kr_cache'):
+            self._kr_cache = {}
+        key = (Y.device, self.cdtype)
+        if key not in self._kr_cache:
+            self._kr_cache[key] = (
+                torch.tensor(self.gen_bus - 1, device=Y.device),   # MATLAB 1-based
+                torch.arange(self.NG, device=Y.device))
+        idx, arange_ng = self._kr_cache[key]
         Ybb = Y.clone()
-        idx = torch.tensor(self.gen_bus - 1, device=Y.device)
         Ybb[:, idx, idx] = Ybb[:, idx, idx] + yg
         Ybg = torch.zeros(Bn, self.NB, self.NG, dtype=self.cdtype, device=Y.device)
-        Ybg[:, idx, torch.arange(self.NG, device=Y.device)] = -yg
-        Vr = -torch.linalg.solve(Ybb, Ybg)
+        Ybg[:, idx, arange_ng] = -yg
+        Vr = -self._solve_batched(Ybb, Ybg)
         Yr = torch.diag(yg).unsqueeze(0) + Ybg.transpose(1, 2) @ Vr
         return Yr, Vr
 

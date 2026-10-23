@@ -81,6 +81,11 @@ ap.add_argument('--val_instants', type=int, default=4096)
 ap.add_argument('--unfreeze_all', action='store_true')
 ap.add_argument('--print_every', type=int, default=1)
 ap.add_argument('--no_progress', action='store_true')
+ap.add_argument('--cuda_graph', action='store_true',
+                help='capture the training step as a CUDA graph (launch '
+                     'overhead of the unrolled rollout dominates; needs '
+                     'full-size batches, ROCm/HIP capture, --batch_size '
+                     'dividing the epoch)')
 args = ap.parse_args()
 
 torch.manual_seed(args.seed); np.random.seed(args.seed)
@@ -155,7 +160,11 @@ print(f"Trainable parameters: {sum(q.numel() for q in trainable):,} "
       f"of {sum(q.numel() for q in model.parameters()):,}"
       f"{'  (all unfrozen)' if args.unfreeze_all else ''}")
 
-opt = torch.optim.Adam(trainable, lr=args.lr)
+# capturable=True is a CUDA-graph requirement: the optimizer step keeps its
+# state tensors on-device so a captured step can be replayed. The eager path
+# is math-identical; capturable Adam only moves the scalars, at a small
+# per-step cost that graph replay repays many times over.
+opt = torch.optim.Adam(trainable, lr=args.lr, capturable=args.cuda_graph)
 val_bs = min(args.batch_size, args.val_instants)
 n_val_batches = max(1, args.val_instants // val_bs)
 
@@ -301,6 +310,22 @@ _all_seeds = [[int(rng_b.integers(0, 2**63 - 1)) for _ in range(n_batches)]
               for _ in range(args.epochs)]
 pf = _Prefetcher(_all_orders, _all_seeds)
 pf.start()
+
+# ── CUDA graph capture of the training step ─────────────────────────────────
+# Twin of refine_dp.py (commit 3246cfd). The step is launch-overhead bound:
+# the rollout runs n_steps tiny RK4 sub-steps and the cascade head unrolls
+# n_refine simulator-in-the-loop cells (each with its own rollout), all of
+# which submit tiny kernels per call. Shapes are static (full batches only;
+# a partial final batch falls back to eager), the control flow is python-flag
+# only, and the dual-ascent lam is read from a device tensor (lam_t) because a
+# python float would be baked into the graph.
+CG = args.cuda_graph and device.type == 'cuda'
+if args.cuda_graph and device.type != 'cuda':
+    print("--cuda_graph requested but no CUDA device; running eager.")
+cg_graph = None
+cg_out = lam_t = static = None
+captured_this_batch = False
+CG_KEYS = ('feat', 'x_meas', 'fut', 'vmask', 'active', 'age')
 for epoch in range(1, args.epochs + 1):
     prog.epoch_start()
     pf.epoch = epoch - 1   # next() drops entries from earlier epochs
@@ -310,21 +335,103 @@ for epoch in range(1, args.epochs + 1):
         if got is None:
             continue
         b = su.to_dev(got)
-        opt.zero_grad(set_to_none=True)
-        o = model(b['feat'], b['x_meas'], ctrl=True, vmask=b['vmask'])
-        pk_c, has_c = model.judged(o['w_ctrl'], b['vmask'])
-        viol = model.violation(o['w_ctrl'], b['vmask'])
-        # same gate in the loss as in the metric: instants with nothing to
-        # correct would otherwise push dP UP, against the whole point here
-        rm = actionable(has_c, b['x_meas'], b['active'], model.limit).float()
-        tgt = model.limit - model.margin
-        p_fail = torch.sigmoid((pk_c - tgt) / A['dp_tau'])
-        envelope = (((p_fail + A['w_viol'] * viol / model.limit) * rm).sum()
-                    / rm.sum().clamp(min=1))
-        norm = o['dP'].pow(2).sum(1).mean()
-        (norm + lam * envelope).backward()
-        nn.utils.clip_grad_norm_(trainable, 1.0)
-        opt.step()
+        full_batch = b['feat'].shape[0] == args.batch_size
+        captured_this_batch = False
+
+        if CG and cg_graph is None and full_batch:
+            # First full batch: create the lam device tensor, warm up on a side
+            # stream, then capture one step (forward + backward + clip + step).
+            lam_t = torch.full((), lam, device=b['feat'].device)
+            su.S.solver_capture_safe = True   # hipSOLVER can't run inside capture
+            static = {k: b[k] for k in CG_KEYS}
+
+            def _step():
+                o = model(static['feat'], static['x_meas'], ctrl=True,
+                          vmask=static['vmask'])
+                pk_c, has_c = model.judged(o['w_ctrl'], static['vmask'])
+                viol = model.violation(o['w_ctrl'], static['vmask'])
+                reach = actionable(has_c, static['x_meas'], static['active'],
+                                   model.limit)
+                rm = reach.float()
+                tgt = model.limit - model.margin
+                p_fail = torch.sigmoid((pk_c - tgt) / A['dp_tau'])
+                env = (((p_fail + A['w_viol'] * viol / model.limit) * rm).sum()
+                       / rm.sum().clamp(min=1))
+                nrm = o['dP'].pow(2).sum(1).mean()
+                (nrm + lam_t * env).backward()
+                nn.utils.clip_grad_norm_(trainable, 1.0)
+                opt.step()
+                return nrm, env
+
+            # Warmup AND capture run on the same large-stack worker thread:
+            # (a) the step records tens of thousands of tiny kernels (unrolled
+            #     RK4 rollouts + their unrolled backward), which overflowed the
+            #     default 8 MB main-thread stack on Windows Python (0xC00000FD);
+            #     256/128 MB are REJECTED by Windows Python _threading — try
+            #     64 -> 32 -> 16;
+            # (b) hipBLAS handles are per-thread and CANNOT be created during
+            #     capture, so the warmup must materialize them on this thread
+            #     BEFORE the capture attempt.
+            import threading as _th
+            holder = {}
+
+            def _capture():
+                s_ = torch.cuda.Stream()
+                s_.wait_stream(torch.cuda.current_stream())
+                with torch.cuda.stream(s_):
+                    for _ in range(3):
+                        _step()
+                torch.cuda.current_stream().wait_stream(s_)
+                opt.zero_grad(set_to_none=True)   # warmup left grads behind
+                g = torch.cuda.CUDAGraph()
+                with torch.cuda.graph(g):
+                    holder['out'] = _step()
+                holder['graph'] = g
+
+            old_stack = _th.stack_size()
+            for _sz in (64, 32, 16):
+                try:
+                    _th.stack_size(_sz * 1024 * 1024)
+                    break
+                except (ValueError, OverflowError):
+                    continue
+            th_ = _th.Thread(target=_capture)
+            th_.start(); th_.join()
+            _th.stack_size(old_stack)
+            if 'graph' not in holder:
+                raise RuntimeError('CUDA graph capture failed on the worker thread')
+            cg_graph = holder['graph']
+            cg_out = holder['out']
+            # the captured forward/backward/step already ran on THIS batch;
+            # skip its replay and fall through to the agg update.
+            captured_this_batch = True
+
+        if CG and cg_graph is not None and full_batch:
+            if not captured_this_batch:   # capture batch: its step already ran
+                for q in trainable:
+                    if q.grad is not None:
+                        q.grad.zero_()   # zero_grad(set_to_none) is illegal around graphs
+                for k in CG_KEYS:
+                    static[k].copy_(b[k], non_blocking=True)
+                lam_t.fill_(lam)
+                cg_graph.replay()
+            norm, envelope = cg_out
+        else:
+            opt.zero_grad(set_to_none=True)
+            o = model(b['feat'], b['x_meas'], ctrl=True, vmask=b['vmask'])
+            pk_c, has_c = model.judged(o['w_ctrl'], b['vmask'])
+            viol = model.violation(o['w_ctrl'], b['vmask'])
+            # same gate in the loss as in the metric: instants with nothing to
+            # correct would otherwise push dP UP, against the whole point here
+            rm = actionable(has_c, b['x_meas'], b['active'], model.limit).float()
+            tgt = model.limit - model.margin
+            p_fail = torch.sigmoid((pk_c - tgt) / A['dp_tau'])
+            envelope = (((p_fail + A['w_viol'] * viol / model.limit) * rm).sum()
+                        / rm.sum().clamp(min=1))
+            norm = o['dP'].pow(2).sum(1).mean()
+            (norm + lam * envelope).backward()
+            nn.utils.clip_grad_norm_(trainable, 1.0)
+            opt.step()
         agg['norm'] += float(norm.detach()); agg['fail'] += float(envelope.detach())
         agg['n'] += 1
         prog.batch(epoch, bi, {'|dP|^2': agg['norm'] / agg['n'],
@@ -407,3 +514,15 @@ else:
         print(f"  lambda ended at {lam:.2f}. If it was still falling, the search "
               f"stopped before the norm term took over: raise --warmup or lower "
               f"--lam0.")
+
+# Shutdown hygiene (CG runs only): pf's worker is a non-daemon thread that can
+# hang interpreter exit holding a CUDA context; and HIP graphs hold a private
+# allocator pool whose release deadlocks this torch build's interpreter
+# shutdown on Windows (graph.reset()/empty_cache() both hang) — bypass
+# teardown entirely and let the OS reclaim at process exit. Everything before
+# this point is already flushed and saved.
+pf.close()
+if CG and cg_graph is not None:
+    import sys as _sys
+    _sys.stdout.flush(); _sys.stderr.flush()
+    os._exit(0)
