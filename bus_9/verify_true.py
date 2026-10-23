@@ -171,7 +171,10 @@ def make_batch(ks, rng, tk_fixed=None):
         blk = np.asarray(X[k, i0:ie + N_ROLL * ROLL_STRIDE + 1])
         o = ie - i0
         win[j] = blk[0:o + 1:W_STRIDE]
-        fut[j] = blk[o::ROLL_STRIDE][:N_ROLL + 1][:, FUT_IDX]   # spacing = DT_ROLL_EFF
+        f = blk[o::ROLL_STRIDE][:N_ROLL + 1][:, FUT_IDX]        # spacing = DT_ROLL_EFF
+        if f.shape[0] < N_ROLL + 1:          # scenario ends before the horizon (rare, huge dt)
+            f = np.concatenate([f, np.repeat(f[-1:], N_ROLL + 1 - f.shape[0], 0)])
+        fut[j] = f
     d = win[..., D_IDX]; w = win[..., W_IDX]; pm = win[..., PM_IDX]
     th = win[..., TH_IDX]
     feat = np.concatenate([d[..., 1:] - d[..., :1], (w - 1.0) / 0.01, pm,
