@@ -142,6 +142,7 @@ ap.add_argument('--plot_scenario', type=int, nargs='*', default=None,
 ap.add_argument('--plot_candidates', type=int, default=64,
                 help='scenarios examined per fault type when picking cases')
 args = ap.parse_args()
+dt_roll_override = vars(args).get('dt_roll')
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 os.makedirs(args.out, exist_ok=True)
@@ -329,7 +330,6 @@ for lab, path in specs:
 if len({m.label for m in models}) < len(models):
     sys.exit("two checkpoints have the same label; give them explicit 'label=path'")
 SYS = System(models[0])
-dt_roll_override = vars(args)['dt_roll']
 
 # the models must share the geometry that defines a decision and its judgement
 for key in ('w_max', 'horizon', 'dt_roll', 'dt_window'):
