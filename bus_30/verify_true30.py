@@ -66,13 +66,22 @@ ap.add_argument('--instants-file', default=None,
                      '<out>/instants.json (shared scenarios); '
                      'requires matching --n and --split.')
 ap.add_argument('--seed', type=int, default=11)
+ap.add_argument('--n_refine', type=int, default=None,
+                help='override the cascade head refinement count (default: ckpt)')
+ap.add_argument('--n_roll', type=int, default=None,
+                help='override the controller rollout steps (default: ckpt); '
+                     'the TRUE-dynamics rescue judgment window is unchanged')
+ap.add_argument('--dt_roll', type=float, default=None,
+                help='override the controller rollout step (sweep flag; '
+                     'horizon kept: n_roll = horizon / dt_roll)')
 ap.add_argument('--cuda_graph', action='store_true',
                 help='Capture the true-dynamics RK4 loop into a CUDA graph and '
                      'replay it per batch (launch-bound otherwise). Partial '
                      'batches fall back to eager.')
 args = ap.parse_args()
 
-su = Setup(args.ckpt, args.data, args.base, args.sys)
+su = Setup(args.ckpt, args.data, args.base, args.sys,
+           dt_roll=args.dt_roll, n_roll=args.n_roll, n_refine=args.n_refine)
 device, model, A, S = su.device, su.model, su.A, su.S
 model.eval()
 t_fault, t_clear, t_grid = su.t_fault, su.t_clear, su.t_grid

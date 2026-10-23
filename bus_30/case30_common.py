@@ -74,7 +74,14 @@ class Setup:
     """Checkpoint + data + model, built exactly the way training built them."""
 
     def __init__(self, ckpt, data, base='case30_base.mat',
-                 sys_mat='case30_simulink_data.mat', device=None, verbose=True):
+                 sys_mat='case30_simulink_data.mat', device=None, verbose=True,
+                 dt_roll=None, n_roll=None, n_refine=None):
+        """dt_roll/n_roll/n_refine override the checkpoint's rollout geometry
+        (the measured window is untouched). Mirror of the 9-bus verify_true.py
+        sweep support: dt_roll changes the SAMPLE SPACING (horizon kept:
+        n_roll = horizon / dt_roll); an explicit --n_roll sets the count
+        directly. Shapes are geometry-free (LSTM is hidden-only), so the
+        strict state-dict load is unaffected."""
         for f_ in (ckpt, base, sys_mat, os.path.join(data, 'X.npy')):
             if not os.path.exists(f_):
                 raise SystemExit(f"not found: {f_}")
@@ -107,11 +114,27 @@ class Setup:
         self.idx_tr = np.asarray(sp['train']); self.idx_va = np.asarray(sp['val'])
         self.idx_te = np.asarray(sp['test'])
 
-        # geometry from the checkpoint
+        # geometry from the checkpoint, with rollout overrides applied
         self.W_STEPS = int(ck['w_steps'])
         self.W_STRIDE = int(round(A['dt_window'] / self.DT))
-        self.ROLL_STRIDE = int(round(A['dt_roll'] / self.DT))
-        self.N_ROLL = int(round(A['horizon'] / A['dt_roll']))
+        self.DT_ROLL_EFF = A['dt_roll'] if dt_roll is None else float(dt_roll)
+        self.ROLL_STRIDE = int(round(self.DT_ROLL_EFF / self.DT))
+        self.N_ROLL_CFG = int(round(A['horizon'] / A['dt_roll']))
+        if n_roll is not None:
+            self.N_ROLL = int(n_roll)
+        elif dt_roll is not None:
+            # keep the horizon, change the spacing
+            self.N_ROLL = int(round(A['horizon'] / self.DT_ROLL_EFF))
+        else:
+            self.N_ROLL = self.N_ROLL_CFG
+        self.N_REFINE = A.get('n_refine', 3) if n_refine is None else int(n_refine)
+        self.HORIZON_EFF = self.N_ROLL * self.DT_ROLL_EFF
+        self.dt_roll_override = (dt_roll is not None or n_roll is not None
+                                 or n_refine is not None)
+        if verbose and self.dt_roll_override:
+            print(f"Rollout override: dt_roll {self.DT_ROLL_EFF*1000:.0f} ms, "
+                  f"n_roll {self.N_ROLL} (horizon eff "
+                  f"{self.HORIZON_EFF:.2f} s), n_refine {self.N_REFINE}")
         if 'feat_mu' in ck:
             self.FEAT_MU = np.asarray(ck['feat_mu'], np.float32)
             self.FEAT_SD = np.asarray(ck['feat_sd'], np.float32)
@@ -131,10 +154,10 @@ class Setup:
                            beta0=A['beta0'], encoder=A.get('encoder', 'lstm'),
                            mlp_proj=A.get('mlp_proj', 160))
         self.model = RolloutController(
-            self.S, enc, horizon=A['horizon'], dt_roll=A['dt_roll'],
+            self.S, enc, horizon=self.HORIZON_EFF, dt_roll=self.DT_ROLL_EFF,
             omega_limit=self.OMEGA_LIMIT, margin=A['margin'],
             dp_head=A['dp_head'], dp_hidden=A['dp_hidden'],
-            dp_fc_layers=A['dp_fc_layers'], n_refine=A['n_refine'],
+            dp_fc_layers=A['dp_fc_layers'], n_refine=self.N_REFINE,
             dp_cell=A.get('dp_cell', 'lstm')).to(dev)
         self.model.load_state_dict(ck['model'])      # strict: shapes must match
         self.enc = enc
@@ -183,7 +206,11 @@ class Setup:
             blk = np.asarray(self.X[k, i0:ie + self.N_ROLL * self.ROLL_STRIDE + 1])
             o = ie - i0
             win[j] = blk[0:o + 1:self.W_STRIDE]
-            fut[j] = blk[o::self.ROLL_STRIDE][:self.N_ROLL + 1][:, FUT_IDX]
+            f = blk[o::self.ROLL_STRIDE][:self.N_ROLL + 1][:, FUT_IDX]
+            if f.shape[0] < self.N_ROLL + 1:
+                # the scenario ends before the horizon (rare, huge dt_roll)
+                f = np.concatenate([f, np.repeat(f[-1:], self.N_ROLL + 1 - f.shape[0], 0)])
+            fut[j] = f
 
         feat = (featurize(win) - self.FEAT_MU) / self.FEAT_SD
         re = win[:, -1, :]; d = re[:, D_IDX]
@@ -193,7 +220,7 @@ class Setup:
         t_change = np.where(active, self.t_clear[ks],
                             np.where(tk < self.t_fault[ks], self.t_fault[ks], np.inf))
         valid_t = np.clip(t_change - tk, 0.0, A['horizon'])
-        step_t = np.arange(self.N_ROLL + 1) * A['dt_roll']
+        step_t = np.arange(self.N_ROLL + 1) * self.DT_ROLL_EFF
         vmask = (step_t[None, :] <= valid_t[:, None]).astype(np.float32)
         age = (tk - self.t_fault[ks]).astype(np.float32)
         return dict(feat=torch.tensor(feat),
@@ -239,7 +266,7 @@ if __name__ == '__main__':
     su = Setup(a.ckpt, a.data)
     # run train_case30.py up to (not including) its model section, with the
     # checkpoint's own arguments, and compare the two builders draw for draw
-    src = open(a.train_script).read()
+    src = open(a.train_script, encoding='utf-8').read()
     src = src[:src.index('# ── model ──')]
     argv = ['train_case30.py', '--data', a.data, '--init', a.ckpt]
     for k in ('w_max', 'dt_window', 'horizon', 'dt_roll', 'p_active',
