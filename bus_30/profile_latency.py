@@ -38,6 +38,10 @@ ap.add_argument('--batch', type=int, nargs='+', default=[1, 256])
 ap.add_argument('--reps', type=int, default=100, help='timed reps per section')
 ap.add_argument('--prof_reps', type=int, default=10, help='profiled reps per section')
 ap.add_argument('--seed', type=int, default=42)
+ap.add_argument('--graph', action='store_true', default=False,
+                help='Capture the whole decision forward into ONE CUDA graph per'
+                     ' batch size and re-time it (eager numbers stay measured so'
+                     ' the verdict table is eager vs graph side by side).')
 ap.add_argument('--out', default='profile_latency_out')
 args = ap.parse_args()
 
@@ -174,7 +178,15 @@ print(f"ckpt: {args.ckpt}   encoder: {A.get('encoder','lstm')}   dp_head: {A.get
       f"   n_refine: {model.n_refine}   N_ROLL: {N_ROLL}   device: {device.type}\n")
 
 results = {}
+if args.graph and os.path.exists(os.path.join(args.out, 'profile_latency.json')):
+    results = {int(k): v for k, v in
+               json.load(open(os.path.join(args.out, 'profile_latency.json'))).items()}
+    args.batch = [int(x) for x in args.batch]
+    print(f"(loaded eager results from {args.out}/profile_latency.json;"
+          f" graph pass only)")
 for bs in args.batch:
+    if bs in results and 'sections' in results.get(bs, {}):
+        continue                     # eager numbers already measured in a previous pass
     b = make_batch(bs, np.random.default_rng(args.seed))
     with torch.no_grad():
         o_enc = model.enc(b['feat'])
@@ -230,11 +242,15 @@ for bs, R in results.items():
     # full decision = sum of sections (they are the disjoint phases of forward)
     tot = sum(t['ms'] for t in R['sections'].values())
     print(f"{'SUM(sections)':14s} {bs:>6d} {tot:>10.3f}")
-    def _whole():
-        with torch.no_grad():
-            model(b['feat'], b['x_meas'], hard=True, ctrl=True, vmask=b['vmask'])
-    whole_ms, _ = time_section(_whole)
-    print(f"{'full forward':14s} {bs:>6d} {whole_ms:>10.3f}   (end-to-end measured)\n")
+    if 'sync_attribution' in R:
+        whole_ms = R['sync_attribution']['wall_ms']
+        print(f"{'full forward':14s} {bs:>6d} {whole_ms:>10.3f}   (end-to-end, synced)\n")
+    else:
+        def _whole():
+            with torch.no_grad():
+                model(b['feat'], b['x_meas'], hard=True, ctrl=True, vmask=b['vmask'])
+        whole_ms, _ = time_section(_whole)
+        print(f"{'full forward':14s} {bs:>6d} {whole_ms:>10.3f}   (end-to-end measured)\n")
 
 
 # -- per-call sync attribution (launch overhead is invisible to pure event timing) --
@@ -299,10 +315,15 @@ def timed_attribution(bs):
         for _ in range(args.reps):
             model(b['feat'], b['x_meas'], hard=True, ctrl=True, vmask=b['vmask'])
         sync(); wall = (time.perf_counter()-t0)/args.reps*1000
+        # restore pristine callables -- graph capture must not time/sync inside
         model.rollout = ro
+        type(model.enc).forward = enc_f
+        type(model).network = net_f
         return wall, calls['n'] // (args.reps + 3)
 
 for bs in args.batch:
+    if 'sync_attribution' in results.get(bs, {}):
+        continue     # eager attribution already measured
     wall, n_roll = timed_attribution(bs)
     print(f"\n-- synced per-phase attribution  @batch {bs}  ({n_roll} rollout calls/decision) --")
     for k, v in sorted(tot.items(), key=lambda kv: -kv[1]):
@@ -312,6 +333,89 @@ for bs in args.batch:
     results.setdefault(bs, {})['sync_attribution'] = dict(
         wall_ms=wall, rollout_calls_per_decision=n_roll,
         **{k: v/args.reps for k, v in tot.items()})
+
+
+# ── whole-decision CUDA-graph capture (optional) ─────────────────────────────
+if args.graph:
+    print('\n-- whole-decision CUDA-graph capture --')
+    # Mirror refine_dp.py's proven capture recipe: the step records ~10k tiny
+    # kernels and overflows Windows Python's 8 MB default stack (0xC00000FD),
+    # and hipBLAS handles are per-thread, so warmup AND capture both run on one
+    # large-stack worker thread with an explicit side stream.
+    import threading as _th
+
+    S.solver_capture_safe = True          # hipSOLVER can't run inside capture
+    try:
+        for bs in args.batch:
+            b = make_batch(bs, np.random.default_rng(args.seed))
+            st = {k: torch.empty_like(v) for k, v in
+                  (('feat', b['feat']), ('x_meas', b['x_meas']),
+                   ('vmask', b['vmask']))}
+            for k in st:
+                st[k].copy_(b[k])
+
+            def _dec():
+                with torch.no_grad():
+                    model(st['feat'], st['x_meas'], hard=True, ctrl=True,
+                          vmask=st['vmask'])
+            _dec(); _dec()     # on main thread: materialize any lazy state
+
+            holder = {}
+            def _capture():
+                s = torch.cuda.Stream()
+                s.wait_stream(torch.cuda.current_stream())
+                with torch.cuda.stream(s):
+                    for _ in range(3):
+                        _dec()
+                torch.cuda.current_stream().wait_stream(s)
+                g = torch.cuda.CUDAGraph()
+                with torch.cuda.graph(g):
+                    with torch.no_grad():
+                        holder['out'] = model(st['feat'], st['x_meas'],
+                                              hard=True, ctrl=True,
+                                              vmask=st['vmask'])
+                holder['graph'] = g
+            old_stack = _th.stack_size()
+            for _sz in (256, 128, 64, 32):
+                try:
+                    _th.stack_size(_sz * 1024 * 1024)
+                    break
+                except (ValueError, OverflowError):
+                    continue
+            th_ = _th.Thread(target=_capture)
+            th_.start(); th_.join()
+            _th.stack_size(old_stack)
+            if 'graph' not in holder:
+                print(f'  batch {bs}: capture failed on the worker thread')
+                continue
+            g = holder['graph']
+            # correctness vs eager on the same inputs
+            S.solver_capture_safe = False
+            with torch.no_grad():
+                out_e = model(b['feat'], b['x_meas'], hard=True, ctrl=True,
+                              vmask=b['vmask'])
+            g.replay(); sync()
+            dmax = max((( out_e[k] - holder['out'][k]).abs().max().item()
+                        for k in out_e
+                        if torch.is_tensor(out_e.get(k)) and k in holder['out']
+                        and torch.is_tensor(holder['out'][k])), default=float('nan'))
+            EAGER_MS = (results.get(bs, {}).get('sync_attribution') or {}).get('wall_ms')
+            for _ in range(5):
+                g.replay()
+            sync(); t = time.perf_counter()
+            for _ in range(args.reps):
+                g.replay()
+            sync()
+            ms = (time.perf_counter() - t) / args.reps * 1000
+            results.setdefault(bs, {}).update(
+                graph_decision_ms=ms, graph_maxdiff=dmax,
+                eager_ms=EAGER_MS, rollout_calls=4)
+            print(f'  batch {bs}: graph replay = {ms:.3f} ms | eager = {EAGER_MS:.1f} ms'
+                  f' | speedup {EAGER_MS/ms:.0f}x | max|diff| {dmax:.2e}   \n')
+            S.solver_capture_safe = True
+    finally:
+        S.solver_capture_safe = False
+
 
 os.makedirs(args.out, exist_ok=True)
 with open(os.path.join(args.out, 'profile_latency.json'), 'w') as f:
