@@ -1,0 +1,65 @@
+[
+ {
+  "scenario": 2743,
+  "type": "gen",
+  "t_decision": 2.05111081308787,
+  "generator": 2,
+  "needed_rescue": true,
+  "peak_free_run": 0.007050514221191406,
+  "models": {
+   "LSTM+LSTM": {
+    "dP": [
+     0.1213696226477623,
+     0.11761496961116791,
+     0.13522449135780334
+    ],
+    "peak_run": 0.0039795637130737305,
+    "peak_window": 0.002711057662963867,
+    "status": "inside all run"
+   }
+  },
+  "file": "receding_cascade/refined_common/compare_dt10_test\\trajectories\\gen_sc2743_G2"
+ },
+ {
+  "scenario": 3852,
+  "type": "load",
+  "t_decision": 2.1725770261962674,
+  "generator": 2,
+  "needed_rescue": true,
+  "peak_free_run": 0.0065094828605651855,
+  "models": {
+   "LSTM+LSTM": {
+    "dP": [
+     0.0924217700958252,
+     0.10989082604646683,
+     0.10284695029258728
+    ],
+    "peak_run": 0.0035915374755859375,
+    "peak_window": 0.0035915374755859375,
+    "status": "inside all run"
+   }
+  },
+  "file": "receding_cascade/refined_common/compare_dt10_test\\trajectories\\load_sc3852_G2"
+ },
+ {
+  "scenario": 9989,
+  "type": "line",
+  "t_decision": 4.055860827295158,
+  "generator": 3,
+  "needed_rescue": false,
+  "peak_free_run": 0.0060950517654418945,
+  "models": {
+   "LSTM+LSTM": {
+    "dP": [
+     -0.0513843409717083,
+     0.019191307947039604,
+     -0.21708986163139343
+    ],
+    "peak_run": 0.007736265659332275,
+    "peak_window": 0.0034028291702270508,
+    "status": "inside judged window only"
+   }
+  },
+  "file": "receding_cascade/refined_common/compare_dt10_test\\trajectories\\line_sc9989_G3"
+ }
+]
