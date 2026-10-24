@@ -31,3 +31,11 @@ bus_9/out_dt*.txt
 bus_9/profile_latency_out*.txt
 bus_9/v_*.txt
 bus_30/ab_*.log
+
+# Simulink compiled-model caches (regenerated on build)
+*.slxc
+
+# 9-bus raw stdout logs (results compiled into spacing_sweep_all.json)
+bus_9/out_dt*.txt
+bus_9/profile_latency_out*.txt
+bus_9/v_*.txt
