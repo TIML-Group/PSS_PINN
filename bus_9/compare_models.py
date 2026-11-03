@@ -838,9 +838,16 @@ if not args.no_plot:
               ('window', 'Learned window [ms]', None)]
     fig, axs = plt.subplots(2, 3, figsize=(12, 6.6))
     x = np.arange(len(models))
+    panels_data: dict[str, dict] = {}
+    bar_data = dict(system=SYSTEM, split=args.split, n_instants=args.n,
+                    n_true=N_TRUE, dp_hold=args.dp_hold, seed=args.seed,
+                    rescue_mode=('true' if N_TRUE else 'model'),
+                    labels=[m.label for m in models], panels=panels_data)
     for ax, (k, title, _) in zip(axs.ravel(), panels):
+        bias_cap = None
         if k == 'window':
-            vals = np.array([m.window_ms for m in models]); err = None
+            vals = np.array([m.window_ms for m in models])
+            err, cis = None, None
         else:
             vals = np.array([m.point[k] for m in models])
             cis = np.array([ci(m.boot[k]) for m in models])
@@ -912,6 +919,27 @@ if not args.no_plot:
             ax2.spines['top'].set_visible(False)
             ax2.spines['left'].set_visible(False)
             ax2.spines['right'].set_color(BIAS)
+            bias_cap = dict(
+                values=[float(v) for v in bv],
+                ci_lo=[float(v) for v in bc[:, 0]],
+                ci_hi=[float(v) for v in bc[:, 1]],
+                ci_excludes_zero=[bool(np.isfinite(clo) and (clo > 0 or chi < 0))
+                                  for clo, chi in bc],
+                sym_ylim=[-lim, lim])
+        # ── capture exactly what this panel drew, for compare_bars.json ─────
+        panel_data: dict = dict(
+            title=title,
+            values=[float(v) for v in vals],
+            ci_lo=([float(v) for v in cis[:, 0]] if cis is not None else None),
+            ci_hi=([float(v) for v in cis[:, 1]] if cis is not None else None),
+            zoomed=zoomed,
+            ylim=[float(v) for v in ax.get_ylim()])
+        if bias_cap is not None:
+            panel_data['bias_overlay'] = bias_cap
+        panels_data[k] = panel_data
+    json.dump(bar_data, open(os.path.join(args.out, 'compare_bars.json'), 'w'),
+              indent=1, default=float)
+    print(f"-> {os.path.join(args.out, 'compare_bars.json')}")
     fig.suptitle(f"{SYSTEM}-bus: encoder + ΔP cell ablation  ({args.split}, "
                  f"{args.n} instants, {len(uniq)} scenarios; bars = 95% "
                  f"cluster-bootstrap CI)", fontsize=11, color=INK, x=0.01, ha='left')
@@ -1034,6 +1062,19 @@ if not args.no_plot and args.plots_per_type > 0:
                                label=f'envelope ±{LIMIT:g}'),
                         plt.Rectangle((0, 0), 1, 1, color='#f3ead2', label='fault active'),
                         Line2D([], [], color=INK2, lw=1.0, label='decision instant')]
+            # raw curves for paper re-renders (subagent-facing npz, one per case)
+            np.savez_compressed(
+                os.path.join(tdir, f"series_{tname}_sc{k}_G{g+1}.npz"),
+                t=tt, free=tr_free[:, g],
+                model_tr=np.stack([r['tr'][:, g] for r in runs]).astype(np.float64),
+                model_labels=np.array([m.label for m in models], dtype='<U16'),
+                model_dp=np.stack([r['dP'] for r in runs]),
+                pk_window=np.array([r['pk_win'] for r in runs]),
+                pk_run=np.array([r['pk_run'] for r in runs]),
+                gen_index=int(g), limit=float(LIMIT),
+                t_fault=float(SYS.t_fault[k]), t_clear=float(SYS.t_clear[k]),
+                t_decision=float(tkj), scenario=int(k),
+                needed_rescue=bool(needed_j), fault_type=str(tname))
             allv = np.concatenate([tr_free[:, g]] + [r['tr'][:, g] for r in runs])
             pad = max(1.6 * LIMIT, 1.08 * np.abs(allv - 1).max())
             ax.set_ylim(1 - pad, 1 + pad)
