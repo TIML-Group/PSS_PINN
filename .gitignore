@@ -39,3 +39,6 @@ bus_30/ab_*.log
 bus_9/out_dt*.txt
 bus_9/profile_latency_out*.txt
 bus_9/v_*.txt
+
+# koopman-mpc baseline run outputs (agent-generated work products)
+bus_9/_koopman_out/
