@@ -39,6 +39,7 @@ The architecture is trained on two systems:
 - [Running the 9-bus pipeline](#running-the-9-bus-pipeline)
 - [Running the 30-bus pipeline](#running-the-30-bus-pipeline)
 - [Ablation: LSTM vs size-matched MLP](#ablation-lstm-vs-size-matched-mlp)
+- [Koopman-MPC baseline (9-bus)](#koopman-mpc-baseline-9-bus)
 - [Latency and CUDA-graph capture](#latency-and-cuda-graph-capture)
 - [Evaluation protocol](#evaluation-protocol)
 - [Results](#results)
@@ -126,6 +127,7 @@ the hold-policy study in [Results](#results)).
 │   ├── diagnose_dp.py              head vs oracle vs feasibility ceiling
 │   ├── alpha_residual.py           signed severity error by fault type
 │   ├── compare_models.py           cross-architecture comparison, bootstrap CIs
+│   ├── koopman_baseline.py         Koopman-MPC baseline (EDMD + lifted KF + QP)
 │   └── predict9.py                 rolling-window predictor
 └── bus_30/
     ├── CASE30_DATASET.md           dataset description
@@ -147,7 +149,9 @@ the hold-policy study in [Results](#results)).
     ├── verify_true30.py            true-dynamics verification + reliability diagram (--cuda_graph)
     ├── diagnose_dp30.py            head vs oracle vs feasibility ceiling
     ├── alpha_residual30.py         signed severity error by fault type
-    └── compare_models.py           cross-architecture comparison, bootstrap CIs
+    ├── compare_models.py           cross-architecture comparison, bootstrap CIs
+    ├── predict30.py                rolling-window predictor
+    └── export_case30.py           builds case30_simulink_data.mat + case30_base.mat
 ```
 
 Each folder is self-contained. Run its scripts from inside that folder: the
@@ -176,9 +180,10 @@ python case30_common.py --selftest --ckpt case30_ctrl/best.pt --data data30_mm
 - Python 3.11
 - PyTorch with CUDA for your GPU (developed on an RTX 5070 Ti Laptop, 12 GB)
 - NumPy, SciPy, h5py, Matplotlib
+- osqp — only for the Koopman-MPC baseline (`bus_9/koopman_baseline.py`)
 
 ```
-pip install numpy scipy h5py matplotlib
+pip install numpy scipy h5py matplotlib osqp
 # plus a CUDA build of torch from https://pytorch.org
 ```
 
@@ -417,6 +422,16 @@ measured inside the model's own identified dynamics. "True" figures apply the
 emitted ΔP in a simulation of the real faulted system. Test split: 4096
 instants, 499 scenarios, 95% cluster-bootstrap CI.
 
+**Frozen shared draws.** Every reported comparison and verification table is
+scored on the same frozen decision-instant draw: `compare_models.py` exports
+the exact scenario/instant list to `<out>/instants.json`, and
+`verify_true.py` / `verify_true30.py` re-load it with `--instants-file`, so
+comparison charts and verification rows agree with each other (and with the
+baseline sweep) by construction — the seeds never have to match by luck.
+`compare_models.py` also writes `compare_bars.json` (the plotted bar data with
+CIs) and per-case trajectory series `.npz` files used by the paper's figure
+scripts.
+
 ### Physics ports
 
 | | 9-bus | 30-bus |
@@ -544,6 +559,76 @@ it, as a new control policy). Without ΔP the end-of-run rate is 0.000.
 
 ---
 
+## Koopman-MPC baseline (9-bus)
+
+`bus_9/koopman_baseline.py` — one self-contained script for the published,
+problem-matched classical baseline (Korda, Susuki & Mezić 2018,
+[arXiv:1803.10744]). It is deliberately blind: an EDMD lift fitted once by
+least squares on pre-fault dynamics (no encoder, no fault knowledge, no
+schedule), a steady lifted Kalman filter on the measured noisy channels, and a
+dense-form linear QP (`osqp`) on the governor channel. Honest-baseline rules
+(no tuning toward the oracle, knobs tuned and disclosed) were fixed before any
+code — see the module docstring.
+
+```
+python koopman_baseline.py crosscheck   # scorer vs verify_true.py: exact-zero residual gate
+python koopman_baseline.py fit-edmd --fit fullchan|angdiff2|bare
+python koopman_baseline.py fit-kf
+python koopman_baseline.py run-mpc --channel gov_fullchan|korda_native_bare
+python koopman_baseline.py sweep        # seed-42 shared-draw validation table + latency
+python koopman_baseline.py scan         # stretch: encoder-scheduled min-norm scan
+```
+
+Outputs go to `bus_9/_koopman_out/` (gitignored); every shipped number is
+frozen in JSON there. Sweep protocol: seed-42 shared draw (same
+`instants.json` as the compare/verify runs), 2048 true-sim instants / 484
+scenarios, same scorer, masks, grace and rescue definition as
+`verify_true.py` — cross-checked to exact zero against `verify_true.py` on 16
+shared instants.
+
+| row | rescue | end-of-run | harmed | ‖ΔP‖₂ | latency/decision |
+|---|---|---|---|---|---|
+| **Head, LSTM+LSTM** | **0.957** [.935,.976] | **0.882** | 0.0% | 0.104 | 465 eager / 126.6 graphed ms |
+| Head, MLP+MLP | 0.985 [.970,.997] | 0.902 | 0.0% | 0.129 | 462 eager / 126.6 graphed ms |
+| Koopman, governor channel | 0.481 [.391,.567] | 0.464 | 0.44% | 0.099 | 0.82 warm / 3.7 cold ms |
+| Koopman, Korda-native (Pm-fraction) | 0.872 [.810,.925] | 0.695 | **6.7%** | 0.278 | 1.4 / 4.8 ms |
+| Scheduled scan (encoder-identified min-norm) | 0.680 [.617,.745] | 0.557 | 0.0% | 0.086 | offline scan |
+| no-ΔP floor | 0.0 | 0.0 | 0.0% | 0 | — |
+
+(The LSTM head's 0.104 is the like-for-like 2048-instant true draw;
+`compare_results.json` — the 4096-instant compare basis — reports 0.098. The
+like-for-like head-vs-governor statement is "~5% more effort at ~2× the
+rescue", per the corrected population comparison.)
+
+What the table says:
+
+- **The identification-carrying head wins outcome decisively** (~2:1 over the
+  best blind row); **Koopman-MPC wins latency by 2–3 orders of magnitude**
+  (0.82–1.4 ms vs 126.6–465 ms). Same total effort: the head and the
+  governor-channel baseline spend within ~5% of each other (0.104 vs 0.0985
+  ‖ΔP‖₂) — the gap is where the correction lands, not how much is paid. The
+  blind QP cannot point: post-fault `Yred` is unknown, so its uniform
+  ω-error feedback redistributes power in the wrong coordinates.
+- **The hypothesis-blind rows run continuously and pay for it**: the
+  Korda-native channel helps gen/load faults but harms **6.7% of healthy
+  cases** at 3× the effort and *worsens* line faults (−38.7% on the gate
+  case) — it cannot represent the topology change. The governor channel is
+  gentle (0.44% harmed) but nearly ineffective inside its 100 ms horizon: the
+  Tg = 0.2 s droop lag eats most of the window — the plant's own actuator lag
+  acts as a safety device for blind feedback.
+- **Modelling the identified fault is worth ~20 points**: the scheduled scan
+  optimises through the encoder-identified faulted model and is the safest
+  classical row (0 harmed, lowest effort 0.086) — but it re-emits one constant
+  ΔP with no refinement rounds, which is exactly the headroom the head's
+  3 propose–re-simulate–refine rounds close (~28 points below the head).
+- **Oracle caveat.** Re-emitting the label ΔP at the *decision* instant
+  (tk-blind, mis-timed relative to the label's own t_apply = t_fault + 0.05
+  schedule) gives only 0.514 and harms 4.8% of healthy cases; applied at its
+  design schedule the same labels give **0.991** — the real ceiling. Timing
+  adaptation alone is worth ~48 points before sizing even enters.
+
+---
+
 ## Latency and CUDA-graph capture
 
 The decision latency matters for a deployed controller: the unrolled 150-step
@@ -570,9 +655,27 @@ Two independent fixes ship in the repo:
    5–210 ms at fixed horizon (checked to four decimals); the RK4 stability
    edge sits at 213 ms and the operating point at dt = 100 ms, where the
    whole-decision graph replay is **20.0 ms** with rescue 0.9003 — the
-   spacing + graph levers compound near-multiplicatively.
+   spacing + graph levers compound near-multiplicatively. The dt = 100 ms row
+   was re-confirmed on the unseen test split (rescue 0.9187, ω RMSE +1.6%
+   relative, all fault-identification metrics unchanged).
    `verify_true*.py --dt_roll_override` re-scores any checkpoint at another
-   spacing (30-bus dt=100 ms test split: ω RMSE +1.6%).
+   spacing.
+
+**The cliff does not generalise: the 30-bus sweep (dt_roll 10 ms – 1 s) has no
+RK4 boundary in range.** The fastest 30-bus machine mode is ≈0.885 rad/s,
+putting the RK4 edge at ≈3.2 s, and the physics rollout survives 1-second
+steps — graph replay is bit-identical to eager at every tested dt. What
+collapses (at dt ≥ 250 ms) is the **ΔP head's feedback path**, trained with
+dense excursion feedback at 10 ms: at coarse spacing it gets too few in-window
+samples and emits garbage set-points (internal rescue 0.018 at 250 ms while
+the physics is still fine, ‖ΔP‖ needy rises, harmed cases climb). The honest
+cost of the dt = 100 ms operating point on the 30-bus is truncation, measured
+at −3.0 pt in-window rescue vs the 10 ms baseline (full-run −1.5 pt) — a
+controller wanting coarser decisions must retrain the cascade head at that
+rate. Compiled sweeps: `bus_9/spacing_sweep_all.json`,
+`bus_30/spacing_sweep_all30.json`. 30-bus latency: eager 535.6 ms @256 → graph
+176.1 / 62.9 / 52.4 ms at dt 10/100/1000 ms (the ~50 ms graph floor is
+encoder-dominated, unlike the 9-bus solver-chain floor).
 
 Capture on ROCm/Windows needs the pitfalls the scripts already handle
 (large-stack capture thread, capture-safe solver, λ via a device tensor,
@@ -654,7 +757,9 @@ loss (`pinn_multifault4.py`, `networks_seq.py`, `plot_validation.py`). It is
 superseded by the pipelines above. If kept, it belongs in a separate `legacy/`
 folder.
 
-A generic system-agnostic module (`power_system.py`, `psys_physics.py`,
-`system_io.py`, `verify_physics.py`, `validate_case30.py`) was drafted and
-then abandoned in favour of the separate `bus_30/` pipeline. It is not used by
-either pipeline and should not be committed alongside them.
+A generic system-agnostic module (`bus_30/psys_physics.py` with its
+validation gate `bus_30/verify_physics.py`) is kept and used: its
+`PowerSystem.ieee9()` regression check reproduces the 9-bus module
+bit-for-bit, and it carries the capture-safe batched solver used by
+`--cuda_graph` training. The draft files `power_system.py`, `system_io.py`
+and `validate_case30.py` from the first attempt at it are gone.
