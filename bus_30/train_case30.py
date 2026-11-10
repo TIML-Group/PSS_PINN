@@ -350,13 +350,17 @@ def featurize(raw):
 N_FEAT = (NG - 1) + NG + NG + NG + NG + NB + (NB - 1)      # 88
 
 # ── per-channel normalisation ────────────────────────────────────────────────
-# Measured on the 30-bus features: the time-varying part is ~6% of the input
-# RMS, and the 30 voltage channels sit at a constant 0.98 with 0.4% variation.
-# The projection is bias-free, so without this the encoder spends its capacity
-# on a static vector identical in every scenario while the fault signature
-# rides at 1/17 the scale -- the identification head then collapses to a
-# constant hypothesis. Statistics come from TRAIN scenarios only.
-# x_meas is NOT normalised: it is the physical state the rollout integrates.
+# Rationale, re-measured 2026-11-10 (probe_feat_stats.py + probe_sig_vs_static.py
+# in bus_30/, frozen rng over data30_mm, 1172 active-fault instants): the static
+# scale split is channel-dependent -- voltage magnitudes sit at ~0.98 with the
+# fault signature ~74x smaller than the static offset (signature ~1% of value);
+# Pm/Id/Iq carry static offsets 7-12x the signature. The earlier "6% of the
+# input RMS / 1:17" figures here did not reproduce under any standard aggregate
+# and are retired. The projection is bias-free, so without this the encoder
+# spends its capacity on a static vector identical in every scenario and the
+# identification head collapses to a constant hypothesis. Statistics come from
+# TRAIN scenarios only. x_meas is NOT normalised: it is the physical state the
+# rollout integrates.
 def feat_stats(idx, n_scen=256, n_times=32, rng=None):
     rng = rng or np.random.default_rng(0)
     ks = rng.choice(idx, size=min(n_scen, len(idx)), replace=False)
