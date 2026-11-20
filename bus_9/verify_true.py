@@ -60,6 +60,15 @@ ap.add_argument('--dp_hold', default='clear', choices=['clear', 'window', 'run']
                      "which on faults longer than --horizon drops the "
                      "correction MID-FAULT at a hyperparameter boundary. "
                      "'run': never withdrawn (a surplus after clearing).")
+ap.add_argument('--dp_ramp', type=float, default=0.0,
+                help='withdraw dP linearly over this many seconds starting at '
+                     't_off (0 = step withdrawal, the paper convention)')
+ap.add_argument('--dp_policy', default='uniform', choices=['uniform', 'typed'],
+                help="'uniform': every case uses --dp_ramp (paper = step). "
+                     "'typed': --gen_ramp for instants the ENCODER predicts as "
+                     "gen trips, step withdrawal for every other prediction")
+ap.add_argument('--gen_ramp', type=float, default=0.2,
+                help='typed: ramp length (s) for predicted gen trips')
 ap.add_argument('--plots_per_type', type=int, default=3)
 ap.add_argument('--split', default='val', choices=['val', 'test', 'train'],
                 help='Split to verify and plot from (default: validation).')
@@ -244,7 +253,24 @@ def clean_state(ks, tk):
 
 
 @torch.no_grad()
-def full_sim(ks, tk_arr, dP=None, hold='clear', vt=None):
+def pred_kind(o):
+    """Encoder's predicted fault kind per instant (class 0 = 'none')."""
+    return ['none' if i == 0 else HYPOTHESES[i - 1][0]
+            for i in o['p'].argmax(1).tolist()]
+
+
+def wd_ramp(kind, n):
+    """Per-instant withdrawal ramp length (s); 0 = step."""
+    if args.dp_policy == 'typed':
+        if kind is None:
+            raise ValueError('--dp_policy typed needs the predicted kind')
+        r = [args.gen_ramp if k == 'gen' else 0.0 for k in kind]
+    else:
+        r = [args.dp_ramp] * n
+    return torch.tensor(r, dtype=torch.float32, device=device)
+
+
+def full_sim(ks, tk_arr, dP=None, hold='clear', vt=None, kind=None):
     """
     Whole 8 s of the scenario in TRUE dynamics, from the pre-fault equilibrium.
     Network: pre-fault -> faulted on [t_fault, t_clear) -> pre-fault again.
@@ -278,13 +304,14 @@ def full_sim(ks, tk_arr, dP=None, hold='clear', vt=None):
     tf = torch.tensor(t_fault[ks], dtype=torch.float32, device=device)
     tc = torch.tensor(t_clear[ks], dtype=torch.float32, device=device)
     dP_t = dP if dP is not None else torch.zeros(n, 3, device=device)
+    ramp = wd_ramp(kind, n) if dP is not None else torch.zeros(n, device=device)
 
     if args.cuda_graph and n == args.batch:
-        return _full_sim_cap(tf, tc, tk_t, t_off, Yf, dPm, dP_t)
-    return _full_sim_ref(n_steps, tf, tc, tk_t, t_off, Yf, dPm, dP_t)
+        return _full_sim_cap(tf, tc, tk_t, t_off, Yf, dPm, dP_t, ramp)
+    return _full_sim_ref(n_steps, tf, tc, tk_t, t_off, Yf, dPm, dP_t, ramp)
 
 
-def _full_sim_ref(n_steps, tf, tc, tk, t_off, Yf, dPm, dP):
+def _full_sim_ref(n_steps, tf, tc, tk, t_off, Yf, dPm, dP, ramp):
     """Eager reference path (partial batches, and the non-graph default)."""
     n = tf.shape[0]
     Ypre = S.Yred_pre.expand(n, 3, 3)
@@ -301,8 +328,10 @@ def _full_sim_ref(n_steps, tf, tc, tk, t_off, Yf, dPm, dP):
         M = torch.where(act.view(n, 1, 1), Mf, Mp)
         N = torch.where(act.view(n, 1, 1), Nf, Np)
         Ps = S.Pm0.unsqueeze(0) + dPm * act.view(n, 1).float()
-        on = (tm >= tk) & (tm < t_off)
-        Ps = Ps + dP * on.view(n, 1).float()
+        r = ramp.clamp_min(1e-9)
+        w = torch.where(tm < t_off, torch.ones_like(t_off),
+                        ((t_off + r - tm) / r).clamp(0, 1)) * (tm >= tk).float()
+        Ps = Ps + dP * w.view(n, 1)
         x = S.rk4_real(x, M, N, Ps, h)
         traj[:, i + 1] = x[:, 3:6]; states[:, i + 1] = x
     return traj, states
@@ -314,12 +343,12 @@ _sim_buf = None
 _sim_err = None
 
 
-def _full_sim_cap(tf, tc, tk, t_off, Yf, dPm, dP):
+def _full_sim_cap(tf, tc, tk, t_off, Yf, dPm, dP, ramp):
     """Copy the batch into the static buffers, replay the captured loop."""
     global _sim_graph, _sim_buf
     b = _sim_buf
     b['tf'].copy_(tf); b['tc'].copy_(tc)
-    b['tk'].copy_(tk); b['t_off'].copy_(t_off)
+    b['tk'].copy_(tk); b['t_off'].copy_(t_off); b['ramp'].copy_(ramp)
     Mf_c, Nf_c = S.pe_consts(Yf)
     b['Mf'].copy_(Mf_c); b['Nf'].copy_(Nf_c)
     Mp_c, Np_c = S.pe_consts(S.Yred_pre.expand(tf.shape[0], 3, 3))
@@ -341,6 +370,7 @@ def _capture_sim(n_steps, n):
         tf=torch.zeros(n, device=device), tc=torch.zeros(n, device=device),
         tk=torch.full((n,), float(t_grid[-1]), device=device),
         t_off=torch.full((n,), float(t_grid[-1]) + 1.0, device=device),
+        ramp=torch.zeros(n, device=device),
         Mf=torch.zeros(n, 3, 3, dtype=S.cdtype, device=device),
         Nf=torch.zeros(n, 3, 3, dtype=S.cdtype, device=device),
         Mp=torch.zeros(n, 3, 3, dtype=S.cdtype, device=device),
@@ -364,8 +394,10 @@ def _capture_sim(n_steps, n):
             M = torch.where(act.view(n, 1, 1), Mf, Mp)
             N = torch.where(act.view(n, 1, 1), Nf, Np)
             Ps = S.Pm0.unsqueeze(0) + dPm * act.view(n, 1).float()
-            on = (tm >= tk) & (tm < t_off)
-            Ps = Ps + dP * on.view(n, 1).float()
+            r = b['ramp'].clamp_min(1e-9)
+            w = torch.where(tm < t_off, torch.ones_like(t_off),
+                            ((t_off + r - tm) / r).clamp(0, 1)) * (tm >= tk).float()
+            Ps = Ps + dP * w.view(n, 1)
             x = S.rk4_real(x, M, N, Ps, h)
             traj[:, i + 1] = x[:, 3:6]; states[:, i + 1] = x
 
@@ -468,6 +500,7 @@ tot = dict(n=0, need=0, resc_true=0, resc_model=0, ok_true=0, ok_n=0,
            agree=0, norm=0.0, resc_run=0, free_run=0, excluded=0)
 age_hit_t = [0]*len(AGE_BINS); age_hit_m = [0]*len(AGE_BINS); age_n = [0]*len(AGE_BINS)
 plot_pool = {0: [], 1: [], 2: []}
+by_type = {}
 
 n_done = 0
 while n_done < args.n:
@@ -490,7 +523,8 @@ while n_done < args.n:
     dP = o['dP']
 
     tr_free, st_free = full_sim(ks, tk, None)
-    tr_ctrl, _ = full_sim(ks, tk, dP, hold=args.dp_hold, vt=valid_t)
+    tr_ctrl, _ = full_sim(ks, tk, dP, hold=args.dp_hold, vt=valid_t,
+                          kind=pred_kind(o))
     pk_free_t, pk_free_run = peaks_from(tr_free, tk, valid_t)
     pk_ctrl_t, pk_ctrl_run = peaks_from(tr_ctrl, tk, valid_t)
     pk_ctrl_m, has_m = model.judged(o['w_ctrl'], vmask)
@@ -524,6 +558,15 @@ while n_done < args.n:
     tot['ok_true'] += int(win_t[reach].sum()); tot['ok_n'] += int(reach.sum())
     tot['agree'] += int((win_t[need] == win_m[need]).sum())
     tot['norm'] += float(dP.pow(2).sum(1).sqrt().sum())
+    # harm: healthy without dP over the judged window, pushed out by it
+    healthy = (pk_free_t >= 0) & (pk_free_t <= model.limit)
+    tot['healthy'] = tot.get('healthy', 0) + int(healthy.sum())
+    tot['harmed'] = tot.get('harmed', 0) + int((healthy & ~win_t).sum())
+    _nd, _wt, _wr = need.cpu().numpy(), win_t.cpu().numpy(), win_run.cpu().numpy()
+    for ti_, tname in enumerate(TYPE_NAMES):
+        m = _nd & (y_type[ks] == ti_ + 1)
+        bt = by_type.setdefault(tname, [0, 0, 0])
+        bt[0] += int(m.sum()); bt[1] += int(_wt[m].sum()); bt[2] += int(_wr[m].sum())
 
     ag = tk - t_fault[ks]; nd = need.cpu().numpy()
     wt = win_t.cpu().numpy(); wm = win_m.cpu().numpy()
@@ -576,6 +619,11 @@ json.dump({'n_instants': tot['n'], 'n_need': tot['need'],
            'agreement': R(tot['agree'], tot['need']),
            'ok_true': R(tot['ok_true'], tot['ok_n']),
            'mean_dP': tot['norm'] / tot['n'], 'dp_hold': args.dp_hold,
+           'dp_ramp': args.dp_ramp, 'dp_policy': args.dp_policy,
+           'gen_ramp': args.gen_ramp,
+           'healthy': tot.get('healthy', 0), 'harmed': tot.get('harmed', 0),
+           'by_type': {t: {'n': n, 'true': R(w, n), 'full_run': R(r, n)}
+                       for t, (n, w, r) in by_type.items()},
            'excluded_no_active_fault': tot['excluded'],
            'rescue_true_full_run': R(tot['resc_run'], tot['need']),
            'no_dp_full_run': R(tot['free_run'], tot['need']),
@@ -610,7 +658,8 @@ def select_plot_cases(ft, n_want, rng):
                    vmask=vmask.to(device))
     dP_ = o_['dP']
     trf, stf = full_sim(ks_, tk_, None)
-    trc, _ = full_sim(ks_, tk_, dP_, hold=args.dp_hold, vt=vt_)
+    kind_ = pred_kind(o_)
+    trc, _ = full_sim(ks_, tk_, dP_, hold=args.dp_hold, vt=vt_, kind=kind_)
     pf, _ = peaks_from(trf, tk_, vt_)
     pc, _ = peaks_from(trc, tk_, vt_)
     pm, _ = model.judged(o_['w_ctrl'], vmask.to(device))
@@ -621,7 +670,8 @@ def select_plot_cases(ft, n_want, rng):
     out = []
     for j in order[:n_want]:
         out.append((int(ks_[j]), float(tk_[j]), float(vt_[j]), dP_[j].cpu().numpy(),
-                    float(pf[j]), float(pc[j]), float(pm[j]), bool(needed[j])))
+                    float(pf[j]), float(pc[j]), float(pm[j]), bool(needed[j]),
+                    kind_[j]))
     return out
 
 
@@ -642,12 +692,13 @@ h = args.dt_true
 from matplotlib.lines import Line2D
 GEN_COLORS = ['#1f77b4', '#d62728', '#2ca02c']
 for ft, cases in plot_pool.items():
-    for ci, (k, tkj, vt, dPj, pf, pc, pm_, needed_) in enumerate(cases):
+    for ci, (k, tkj, vt, dPj, pf, pc, pm_, needed_, kindj) in enumerate(cases):
         ksa = np.array([k]); tka = np.array([tkj])
         dPt = torch.tensor(dPj, dtype=torch.float32, device=device).unsqueeze(0)
         vta = np.array([vt])
         tr_free = full_sim(ksa, tka, None)[0][0].cpu().numpy()
-        tr_ctrl = full_sim(ksa, tka, dPt, hold=args.dp_hold, vt=vta)[0][0].cpu().numpy()
+        tr_ctrl = full_sim(ksa, tka, dPt, hold=args.dp_hold, vt=vta,
+                           kind=[kindj])[0][0].cpu().numpy()
         tt = np.arange(tr_free.shape[0]) * h
 
         fig, ax = plt.subplots(figsize=(13, 5.5))

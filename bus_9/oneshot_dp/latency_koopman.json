@@ -1,0 +1,11 @@
+{
+ "n_scenarios": 40,
+ "n_decisions": 15560,
+ "decision_median_ms": 3.895150264725089,
+ "decision_p95_ms": 7.921390002593393,
+ "decision_mean_ms": 4.2754266246468555,
+ "decision_max_ms": 80.31850028783083,
+ "kf_update_median_ms": 1.3735000975430012,
+ "kf_update_p95_ms": 2.877300139516592,
+ "osqp_version": "1.1.3"
+}

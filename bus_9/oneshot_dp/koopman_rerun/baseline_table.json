@@ -1,0 +1,886 @@
+{
+ "meta": {
+  "system": "9",
+  "split": "test",
+  "seed_instants": 42,
+  "instants_file": "C:\\Users\\rnoor\\Documents\\PSS_PINN\\bus_9\\compare_out_s42\\instants.json",
+  "instants_sha256": "f68b87159012b4da6d0eb645171f33089de2ba668fd58d2d07651f5f35a1302f",
+  "n_instants_shared": 4096,
+  "n_true_instants": 2048,
+  "subset": false,
+  "n_scenarios_true_subset": 484,
+  "dt_true": 0.005,
+  "grace_s": 0.2,
+  "omega_limit": 0.005,
+  "dp_hold": "clear",
+  "head_horizon": 1.5,
+  "scorer": "bus_9/koopman_baseline.py true-dynamics core (f64 CPU, batched), cross-checked vs verify_true.py (Task 5)",
+  "crosscheck_json": "C:\\Users\\rnoor\\Documents\\PSS_PINN\\bus_9\\oneshot_dp/koopman_rerun\\task5_crosscheck.json",
+  "bootstrap": {
+   "B": 2000,
+   "clusters": "scenarios",
+   "seed": 49,
+   "note": "compare_models protocol (rng 49, 2000 resamples, W over the full shared-draw unique scenario set)"
+  },
+  "head_columns_assembled": {
+   "compare_out_s42/compare_results.json": "610c97ae0e17bd5e60642f615345ef7b64d9f4d5660a2b6476ba33a4aaee9542",
+   "shared_LSTMref_s42/verify_results.json": "bf6f9af0bdf59005258980d99f78f89a01e9d55de9c898affbee27f67d79c8c3",
+   "shared_MLPref_s42/verify_results.json": "cd62f4be91e260e4342005c21e7609a2e5d0bad63e254c8a4ed270c40440bd13"
+  },
+  "koopman_config": {
+   "fits": {
+    "koopman_gov_fullchan": "task2_edmd_fullchan.json",
+    "korda_native_bare": "task34_bare_refit.json"
+   },
+   "qp_knobs": {
+    "w": 1.0,
+    "db": 0.0005,
+    "Wt": 10.0,
+    "qu": 0.0001,
+    "umax": 1.0,
+    "rate_per_decision": 0.5,
+    "H_steps": 20,
+    "decision_ms": 80.0
+   },
+   "kf_q": 0.0001,
+   "provenance": "identical shipped Task-4 configuration (task34_mpc.json); decisions every 20 ms from t=0 over the whole window (Task-4 protocol), application masked to dp_hold='clear' (zeroed from the clear instant); one measurement-noise stream (seed 42) per batched closed-loop run",
+   "latency_protocol": "fresh per-decision (warm: bounds update + solve; cold: fresh setup + solve, sampled every 7th scenario x 11th decision)"
+  }
+ },
+ "rows": {
+  "head_lstm_cascade": {
+   "kind": "head",
+   "mlabel": "LSTM+LSTM",
+   "ckpt_path": "receding_cascade/refined/best.pt",
+   "metrics": {
+    "decision_acc": {
+     "value": 0.992919921875,
+     "ci": [
+      0.9901387352344834,
+      0.9954341727503896
+     ],
+     "n": 4096,
+     "n_scenarios": 499
+    },
+    "fault_acc": {
+     "value": 0.9956418383518225,
+     "ci": [
+      0.9927852089721613,
+      0.998062053032623
+     ],
+     "n": 2524,
+     "n_scenarios": 491
+    },
+    "type_acc": {
+     "value": 0.9992076069730587,
+     "ci": [
+      0.9979959316707251,
+      1.0
+     ],
+     "n": 2524,
+     "n_scenarios": 491
+    },
+    "detect_acc": {
+     "value": 0.9931640625,
+     "ci": [
+      0.9903917266361956,
+      0.9956187042739557
+     ],
+     "n": 4096,
+     "n_scenarios": 499
+    },
+    "alpha_rmse": {
+     "value": 0.060818881417714195,
+     "ci": [
+      0.05330048501571572,
+      0.06795200702399896
+     ],
+     "n": 1599,
+     "n_scenarios": 306
+    },
+    "alpha_bias": {
+     "value": -0.004218864475398454,
+     "ci": [
+      -0.009180107647503623,
+      0.0008462475210843333
+     ],
+     "n": 1599,
+     "n_scenarios": 306
+    },
+    "omega_rmse": {
+     "value": 0.0006512521026408004,
+     "ci": [
+      0.0005979690388400718,
+      0.0007140592279215735
+     ],
+     "n": 1400010,
+     "n_scenarios": 499
+    },
+    "ool_tpr": {
+     "value": 0.9214611872146119,
+     "ci": [
+      0.893820583976834,
+      0.9454084606900898
+     ],
+     "n": 1095,
+     "n_scenarios": 227
+    },
+    "ool_tnr": {
+     "value": 0.9761724659606656,
+     "ci": [
+      0.9652402284505203,
+      0.9854517968027519
+     ],
+     "n": 2644,
+     "n_scenarios": 473
+    },
+    "rescue_model": {
+     "value": 0.9951632406287787,
+     "ci": [
+      0.9899997219132369,
+      0.9988864452212431
+     ],
+     "n": 827,
+     "n_scenarios": 186
+    },
+    "dP_norm": {
+     "value": 0.0980369810198809,
+     "ci": [
+      0.08786057833733359,
+      0.10884092842862093
+     ],
+     "n": 4096,
+     "n_scenarios": 499
+    },
+    "rescue_true": {
+     "value": 0.9571788413098237,
+     "ci": [
+      0.935316921884086,
+      0.9764157117455299
+     ],
+     "n": 397,
+     "n_scenarios": 157
+    },
+    "rescue_true_end_of_run": {
+     "value": 0.8816120906801007,
+     "ci": [
+      0.8365307071960298,
+      0.9228903559127439
+     ],
+     "n": 397,
+     "n_scenarios": 157
+    },
+    "harmed_pct": {
+     "value": 0.0,
+     "ci": [
+      0.0,
+      0.0
+     ],
+     "n": 1354,
+     "n_scenarios": 424
+    },
+    "dP_norm_need": {
+     "value": 0.3461772731531139,
+     "ci": [
+      0.31405026916265527,
+      0.38209559931496934
+     ],
+     "n": 397,
+     "n_scenarios": 157
+    },
+    "rescue_true_gen": {
+     "value": 0.9319371727748691,
+     "ci": [
+      0.8958276098901099,
+      0.965
+     ],
+     "n": 191,
+     "n_scenarios": 77
+    },
+    "rescue_true_load": {
+     "value": 0.9805825242718447,
+     "ci": [
+      0.9593431263858093,
+      0.9957627118644068
+     ],
+     "n": 206,
+     "n_scenarios": 80
+    },
+    "rescue_true_line": {
+     "value": NaN,
+     "ci": [
+      NaN,
+      NaN
+     ],
+     "n": 0,
+     "n_scenarios": 0
+    },
+    "rescue_true_age_0-50ms": {
+     "value": 0.8552631578947368,
+     "ci": [
+      0.7727128883774453,
+      0.9324324324324325
+     ],
+     "n": 76,
+     "n_scenarios": 60
+    },
+    "rescue_true_age_50-100ms": {
+     "value": 1.0,
+     "ci": [
+      1.0,
+      1.0
+     ],
+     "n": 77,
+     "n_scenarios": 64
+    },
+    "rescue_true_age_100-200ms": {
+     "value": 1.0,
+     "ci": [
+      1.0,
+      1.0
+     ],
+     "n": 165,
+     "n_scenarios": 101
+    },
+    "rescue_true_age_200-500ms": {
+     "value": 0.9615384615384616,
+     "ci": [
+      0.8935980243161094,
+      1.0
+     ],
+     "n": 52,
+     "n_scenarios": 30
+    },
+    "rescue_true_age_>500ms": {
+     "value": 0.8518518518518519,
+     "ci": [
+      0.7036111111111111,
+      0.9666666666666667
+     ],
+     "n": 27,
+     "n_scenarios": 25
+    },
+    "fault_acc_age_0-50ms": {
+     "value": 0.9756637168141593,
+     "ci": [
+      0.9591335227272728,
+      0.9893407132015467
+     ],
+     "n": 452,
+     "n_scenarios": 282
+    },
+    "fault_acc_age_50-100ms": {
+     "value": 1.0,
+     "ci": [
+      1.0,
+      1.0
+     ],
+     "n": 441,
+     "n_scenarios": 267
+    },
+    "fault_acc_age_100-200ms": {
+     "value": 1.0,
+     "ci": [
+      1.0,
+      1.0
+     ],
+     "n": 913,
+     "n_scenarios": 379
+    },
+    "fault_acc_age_200-500ms": {
+     "value": 1.0,
+     "ci": [
+      1.0,
+      1.0
+     ],
+     "n": 294,
+     "n_scenarios": 136
+    },
+    "fault_acc_age_>500ms": {
+     "value": 1.0,
+     "ci": [
+      1.0,
+      1.0
+     ],
+     "n": 424,
+     "n_scenarios": 235
+    },
+    "dp_norm_need_l2_max": {
+     "value": 0.3461772731531139,
+     "ci": [
+      0.31405026916265527,
+      0.38209559931496934
+     ],
+     "n": 397,
+     "n_scenarios": 157
+    },
+    "dp_norm_l2_mean": {
+     "value": 0.0980369810198809,
+     "ci": [
+      0.08786057833733359,
+      0.10884092842862093
+     ],
+     "n": 4096,
+     "n_scenarios": 499
+    }
+   },
+   "latency": {
+    "eager_single_ms": 470.9062766671802,
+    "eager_batch_ms": 489.79764333344065,
+    "graphed_wiki_ms": 126.6,
+    "graphed_wiki_bs1_ms": 138.6,
+    "source": "compare_out_s42 (eager, measured) + profile_latency wiki (graphed canonical)"
+   },
+   "provenance": {
+    "compare_results.json": "610c97ae0e17bd5e60642f615345ef7b64d9f4d5660a2b6476ba33a4aaee9542",
+    "instants.json": "f68b87159012b4da6d0eb645171f33089de2ba668fd58d2d07651f5f35a1302f",
+    "shared_verify_dirs": [
+     "shared_LSTMref_s42/verify_results.json",
+     "shared_MLPref_s42/verify_results.json"
+    ],
+    "profile_latency": [
+     "bus_9/profile_latency_out/profile_latency.json",
+     "wiki concepts/decision-latency-profile.md: eager 464.9 ms @256 / graph 126.6 ms @256; 447.6 / 138.6 ms at bs=1"
+    ],
+    "note": "head rows NOT re-run; per-instant true-dynamics peak |w-1| is not stored in the canonical artifacts -> marked n/a; dp_norm_need_l2_max / dp_norm_l2_mean aliases of the head dP_norm_need / dP_norm metrics (constant held dP)."
+   },
+   "true_peak": "n/a (not stored in canonical artifacts; not re-run per plan)"
+  },
+  "head_mlp": {
+   "kind": "head",
+   "mlabel": "MLP+MLP",
+   "ckpt_path": "receding_fullmlp/refined/best.pt",
+   "metrics": {
+    "decision_acc": {
+     "value": 0.986572265625,
+     "ci": [
+      0.9819880322319596,
+      0.9909094254616826
+     ],
+     "n": 4096,
+     "n_scenarios": 499
+    },
+    "fault_acc": {
+     "value": 0.9900950871632329,
+     "ci": [
+      0.98439313682401,
+      0.9948044674308401
+     ],
+     "n": 2524,
+     "n_scenarios": 491
+    },
+    "type_acc": {
+     "value": 0.9992076069730587,
+     "ci": [
+      0.9979959316707251,
+      1.0
+     ],
+     "n": 2524,
+     "n_scenarios": 491
+    },
+    "detect_acc": {
+     "value": 0.990234375,
+     "ci": [
+      0.9866,
+      0.9936263949509408
+     ],
+     "n": 4096,
+     "n_scenarios": 499
+    },
+    "alpha_rmse": {
+     "value": 0.060710771463350195,
+     "ci": [
+      0.05316721491468627,
+      0.06725038073011097
+     ],
+     "n": 1599,
+     "n_scenarios": 306
+    },
+    "alpha_bias": {
+     "value": 0.013500162461461537,
+     "ci": [
+      0.009532867317294373,
+      0.0174331218052016
+     ],
+     "n": 1599,
+     "n_scenarios": 306
+    },
+    "omega_rmse": {
+     "value": 0.000626500972864471,
+     "ci": [
+      0.0005284495832169634,
+      0.0007380322143575005
+     ],
+     "n": 1400010,
+     "n_scenarios": 499
+    },
+    "ool_tpr": {
+     "value": 0.9515981735159817,
+     "ci": [
+      0.9340208128440493,
+      0.967490018795376
+     ],
+     "n": 1095,
+     "n_scenarios": 227
+    },
+    "ool_tnr": {
+     "value": 0.9826021180030258,
+     "ci": [
+      0.9737569532301142,
+      0.9900037058910358
+     ],
+     "n": 2644,
+     "n_scenarios": 473
+    },
+    "rescue_model": {
+     "value": 0.9963724304715841,
+     "ci": [
+      0.9918696823596143,
+      1.0
+     ],
+     "n": 827,
+     "n_scenarios": 186
+    },
+    "dP_norm": {
+     "value": 0.12910112579294264,
+     "ci": [
+      0.11757690040205296,
+      0.14107229791958698
+     ],
+     "n": 4096,
+     "n_scenarios": 499
+    },
+    "rescue_true": {
+     "value": 0.9848866498740554,
+     "ci": [
+      0.9699210242230261,
+      0.9972144846796658
+     ],
+     "n": 397,
+     "n_scenarios": 157
+    },
+    "rescue_true_end_of_run": {
+     "value": 0.9017632241813602,
+     "ci": [
+      0.8604637858549306,
+      0.9391534391534392
+     ],
+     "n": 397,
+     "n_scenarios": 157
+    },
+    "harmed_pct": {
+     "value": 0.0,
+     "ci": [
+      0.0,
+      0.0
+     ],
+     "n": 1354,
+     "n_scenarios": 424
+    },
+    "dP_norm_need": {
+     "value": 0.4171751040111411,
+     "ci": [
+      0.38228377833545935,
+      0.4559021115510972
+     ],
+     "n": 397,
+     "n_scenarios": 157
+    },
+    "rescue_true_gen": {
+     "value": 0.9738219895287958,
+     "ci": [
+      0.9441854562625427,
+      0.9948737373737374
+     ],
+     "n": 191,
+     "n_scenarios": 77
+    },
+    "rescue_true_load": {
+     "value": 0.9951456310679612,
+     "ci": [
+      0.9833238636363636,
+      1.0
+     ],
+     "n": 206,
+     "n_scenarios": 80
+    },
+    "rescue_true_line": {
+     "value": NaN,
+     "ci": [
+      NaN,
+      NaN
+     ],
+     "n": 0,
+     "n_scenarios": 0
+    },
+    "rescue_true_age_0-50ms": {
+     "value": 0.9473684210526315,
+     "ci": [
+      0.8791125541125541,
+      1.0
+     ],
+     "n": 76,
+     "n_scenarios": 60
+    },
+    "rescue_true_age_50-100ms": {
+     "value": 1.0,
+     "ci": [
+      1.0,
+      1.0
+     ],
+     "n": 77,
+     "n_scenarios": 64
+    },
+    "rescue_true_age_100-200ms": {
+     "value": 1.0,
+     "ci": [
+      1.0,
+      1.0
+     ],
+     "n": 165,
+     "n_scenarios": 101
+    },
+    "rescue_true_age_200-500ms": {
+     "value": 0.9615384615384616,
+     "ci": [
+      0.8935980243161094,
+      1.0
+     ],
+     "n": 52,
+     "n_scenarios": 30
+    },
+    "rescue_true_age_>500ms": {
+     "value": 1.0,
+     "ci": [
+      1.0,
+      1.0
+     ],
+     "n": 27,
+     "n_scenarios": 25
+    },
+    "fault_acc_age_0-50ms": {
+     "value": 0.9734513274336283,
+     "ci": [
+      0.9549757696084711,
+      0.9886634111884032
+     ],
+     "n": 452,
+     "n_scenarios": 282
+    },
+    "fault_acc_age_50-100ms": {
+     "value": 1.0,
+     "ci": [
+      1.0,
+      1.0
+     ],
+     "n": 441,
+     "n_scenarios": 267
+    },
+    "fault_acc_age_100-200ms": {
+     "value": 0.9967141292442497,
+     "ci": [
+      0.9912085494263713,
+      1.0
+     ],
+     "n": 913,
+     "n_scenarios": 379
+    },
+    "fault_acc_age_200-500ms": {
+     "value": 0.9931972789115646,
+     "ci": [
+      0.9822679260997956,
+      1.0
+     ],
+     "n": 294,
+     "n_scenarios": 136
+    },
+    "fault_acc_age_>500ms": {
+     "value": 0.9811320754716981,
+     "ci": [
+      0.961435075969301,
+      0.9953379953379954
+     ],
+     "n": 424,
+     "n_scenarios": 235
+    },
+    "dp_norm_need_l2_max": {
+     "value": 0.4171751040111411,
+     "ci": [
+      0.38228377833545935,
+      0.4559021115510972
+     ],
+     "n": 397,
+     "n_scenarios": 157
+    },
+    "dp_norm_l2_mean": {
+     "value": 0.12910112579294264,
+     "ci": [
+      0.11757690040205296,
+      0.14107229791958698
+     ],
+     "n": 4096,
+     "n_scenarios": 499
+    }
+   },
+   "latency": {
+    "eager_single_ms": 462.37213333370164,
+    "eager_batch_ms": 486.44753000116907,
+    "graphed_wiki_ms": 126.6,
+    "graphed_wiki_bs1_ms": 138.6,
+    "source": "compare_out_s42 (eager, measured) + profile_latency wiki (graphed canonical)"
+   },
+   "provenance": {
+    "compare_results.json": "610c97ae0e17bd5e60642f615345ef7b64d9f4d5660a2b6476ba33a4aaee9542",
+    "instants.json": "f68b87159012b4da6d0eb645171f33089de2ba668fd58d2d07651f5f35a1302f",
+    "shared_verify_dirs": [
+     "shared_LSTMref_s42/verify_results.json",
+     "shared_MLPref_s42/verify_results.json"
+    ],
+    "profile_latency": [
+     "bus_9/profile_latency_out/profile_latency.json",
+     "wiki concepts/decision-latency-profile.md: eager 464.9 ms @256 / graph 126.6 ms @256; 447.6 / 138.6 ms at bs=1"
+    ],
+    "note": "head rows NOT re-run; per-instant true-dynamics peak |w-1| is not stored in the canonical artifacts -> marked n/a; dp_norm_need_l2_max / dp_norm_l2_mean aliases of the head dP_norm_need / dP_norm metrics (constant held dP)."
+   },
+   "true_peak": "n/a (not stored in canonical artifacts; not re-run per plan)"
+  },
+  "koopman_gov_fullchan": {
+   "kind": "sweep",
+   "latency": {
+    "warm_median_ms": 0.8108997717499733,
+    "warm_mean_ms": 0.9845286498047291,
+    "warm_p90_ms": 1.875150017440319,
+    "warm_max_ms": 32.51089993864298,
+    "cold_median_ms": 3.656649962067604,
+    "cold_mean_ms": 4.138046213961476,
+    "n_decisions_per_scenario": 399,
+    "n_warm_samples": 193116,
+    "n_cold_samples": 2590,
+    "cold_sampling": "every 7th scenario x every 11th decision",
+    "note": "fresh per-decision measurement: warm = bounds update + solve on the scenario-warm-started solver; cold = fresh OSQP setup + solve of the same problem"
+   },
+   "fit": {
+    "fit_json": "task2_edmd_fullchan.json",
+    "n_phi": 258
+   },
+   "metrics": {
+    "rescue_true": {
+     "value": 0.4811083123425693,
+     "ci": [
+      0.3906138969638243,
+      0.5671291433032862
+     ],
+     "n": 397,
+     "n_scenarios": 157
+    },
+    "rescue_true_end_of_run": {
+     "value": 0.4634760705289673,
+     "ci": [
+      0.37290894964841786,
+      0.5506230382925298
+     ],
+     "n": 397,
+     "n_scenarios": 157
+    },
+    "harmed_pct": {
+     "value": 0.4431314623338257,
+     "ci": [
+      0.1423436958572668,
+      0.817859079040538
+     ],
+     "n": 1354,
+     "n_scenarios": 424
+    },
+    "no_dp_rescued_end_of_run": {
+     "value": 0.0,
+     "ci": [
+      0.0,
+      0.0
+     ],
+     "n": 397,
+     "n_scenarios": 157
+    },
+    "dp_norm_l2_first": {
+     "value": 0.04085355883866544,
+     "ci": [
+      0.036298537385786776,
+      0.04541900428785425
+     ],
+     "n": 2048,
+     "n_scenarios": 484
+    },
+    "dp_norm_l2_max": {
+     "value": 0.15337394353880035,
+     "ci": [
+      0.1409056827261716,
+      0.16599744813564318
+     ],
+     "n": 2048,
+     "n_scenarios": 484
+    },
+    "dp_norm_l2_mean": {
+     "value": 0.09851453760319118,
+     "ci": [
+      0.08948872804581515,
+      0.10772099049147674
+     ],
+     "n": 2048,
+     "n_scenarios": 484
+    },
+    "dp_norm_l1_mean": {
+     "value": 0.13980737959135786,
+     "ci": [
+      0.12736380645073092,
+      0.15263539626945358
+     ],
+     "n": 2048,
+     "n_scenarios": 484
+    },
+    "dp_norm_need_l2_max": {
+     "value": 0.2785744779682527,
+     "ci": [
+      0.2577313371385381,
+      0.30102264093412995
+     ],
+     "n": 397,
+     "n_scenarios": 157
+    },
+    "rescue_true_gen": {
+     "value": 0.5445026178010471,
+     "ci": [
+      0.41826447740112993,
+      0.6742890365448505
+     ],
+     "n": 191,
+     "n_scenarios": 77
+    },
+    "rescue_true_load": {
+     "value": 0.4223300970873786,
+     "ci": [
+      0.2994219786293294,
+      0.5441732424677185
+     ],
+     "n": 206,
+     "n_scenarios": 80
+    },
+    "rescue_true_line": {
+     "value": NaN,
+     "ci": [
+      NaN,
+      NaN
+     ],
+     "n": 0,
+     "n_scenarios": 0
+    },
+    "rescue_true_age_0-50ms": {
+     "value": 0.4868421052631579,
+     "ci": [
+      0.352112676056338,
+      0.6219512195121951
+     ],
+     "n": 76,
+     "n_scenarios": 60
+    },
+    "rescue_true_age_50-100ms": {
+     "value": 0.42857142857142855,
+     "ci": [
+      0.296875,
+      0.5555871212121211
+     ],
+     "n": 77,
+     "n_scenarios": 64
+    },
+    "rescue_true_age_100-200ms": {
+     "value": 0.4303030303030303,
+     "ci": [
+      0.32580007748934525,
+      0.5409059765995572
+     ],
+     "n": 165,
+     "n_scenarios": 101
+    },
+    "rescue_true_age_200-500ms": {
+     "value": 0.5576923076923077,
+     "ci": [
+      0.32786885245901637,
+      0.7879186602870811
+     ],
+     "n": 52,
+     "n_scenarios": 30
+    },
+    "rescue_true_age_>500ms": {
+     "value": 0.7777777777777778,
+     "ci": [
+      0.6,
+      0.9354838709677419
+     ],
+     "n": 27,
+     "n_scenarios": 25
+    },
+    "rescue_true_status3": {
+     "value": NaN,
+     "ci": [
+      NaN,
+      NaN
+     ],
+     "n": 0,
+     "n_scenarios": 0
+    },
+    "rescue_true_status1": {
+     "value": 0.4811083123425693,
+     "ci": [
+      0.3906138969638243,
+      0.5671291433032862
+     ],
+     "n": 397,
+     "n_scenarios": 157
+    },
+    "need_status3": {
+     "value": 0.07763671875,
+     "ci": [
+      0.053318970891021125,
+      0.10330364681145526
+     ],
+     "n": 2048,
+     "n_scenarios": 484
+    },
+    "need_status2": {
+     "value": 0.0,
+     "ci": [
+      0.0,
+      0.0
+     ],
+     "n": 2048,
+     "n_scenarios": 484
+    },
+    "peak_abs_omega_judged_mean": {
+     "value": 0.002658861660216128,
+     "ci": null,
+     "n": 1879,
+     "n_scenarios": null
+    },
+    "peak_abs_omega_all_max": {
+     "value": 0.01191065220190779,
+     "ci": null,
+     "n": null,
+     "n_scenarios": null
+    }
+   }
+  }
+ },
+ "counts_reconcile": {
+  "n_instants": 2048,
+  "need_sum": 397,
+  "need_by_type": {
+   "gen": 191,
+   "load": 206,
+   "line": 0
+  },
+  "need_status3": 0,
+  "excluded_no_active": 27,
+  "note": "floor-need flags are row-independent (shared draw, same define) and equal for every my-row"
+ },
+ "gates": {
+  "task5_crosscheck": "C:\\Users\\rnoor\\Documents\\PSS_PINN\\bus_9\\oneshot_dp/koopman_rerun\\task5_crosscheck.json"
+ }
+}

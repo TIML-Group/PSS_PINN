@@ -59,6 +59,18 @@ ap.add_argument('--dp_hold', default='clear', choices=['clear', 'window', 'run']
                 help="How long dP stays applied: 'clear' (default, the "
                      "y_delta_p convention) until the fault clears; 'window' "
                      "until the judged window ends; 'run' never withdrawn.")
+ap.add_argument('--dp_ramp', type=float, default=0.0,
+                help='withdraw dP linearly over this many seconds starting at '
+                     't_off (0 = step withdrawal, the paper convention)')
+ap.add_argument('--dp_policy', default='uniform', choices=['uniform', 'typed'],
+                help="'uniform': every case uses --dp_ramp (paper = step). "
+                     "'typed': choose by the ENCODER's predicted fault type")
+ap.add_argument('--gen_ramp', type=float, default=0.2,
+                help='typed: ramp length (s) for predicted gen trips (~Tg)')
+ap.add_argument('--load_pulse_k', type=float, default=0.0,
+                help='typed: post-clear counter-pulse size, fraction of dP')
+ap.add_argument('--load_pulse_s', type=float, default=0.2,
+                help='typed: counter-pulse length (s) after t_off')
 ap.add_argument('--plots_per_type', type=int, default=3)
 ap.add_argument('--split', default='val', choices=['val', 'test', 'train'])
 ap.add_argument('--instants-file', default=None,
@@ -111,14 +123,33 @@ def _fs30_body(n, b, n_steps):
         M = torch.where(act.view(n, 1, 1), Mf, Mp)
         N = torch.where(act.view(n, 1, 1), Nf, Np)
         Ps = S.Pm0.unsqueeze(0) + dPm * act.view(n, 1).float()
-        on = (tm >= tk) & (tm < t_off)
-        Ps = Ps + dP * on.view(n, 1).float()
+        r = b['ramp'].clamp_min(1e-9)
+        w = torch.where(tm < t_off, torch.ones_like(t_off),
+                        ((t_off + r - tm) / r).clamp(0, 1)) * (tm >= tk).float()
+        neg = ((tm >= t_off) & (tm < t_off + b['ps'])).float() * b['pk']
+        Ps = Ps + dP * (w - neg).view(n, 1)
         x = S.rk4_real(x, M, N, Ps, h)
         traj[:, i + 1] = x[:, NG:2 * NG]; states[:, i + 1] = x
 
 
+def pred_kind(o):
+    """Encoder's predicted fault kind per instant ('none'/'gen'/'load'/'line')."""
+    return [S.decode(i)[0] for i in o['p'].argmax(1).tolist()]
+
+
+def wd_params(kind, n):
+    """Per-instant withdrawal shape: ramp length, counter-pulse size/length."""
+    if args.dp_policy == 'typed' and kind is not None:
+        ramp = [args.gen_ramp if k == 'gen' else 0.0 for k in kind]
+        pk = [args.load_pulse_k if k == 'load' else 0.0 for k in kind]
+    else:
+        ramp, pk = [args.dp_ramp] * n, [0.0] * n
+    T = lambda v: torch.tensor(v, dtype=torch.float32, device=device)
+    return T(ramp), T(pk), torch.full((n,), args.load_pulse_s, device=device)
+
+
 @torch.no_grad()
-def full_sim(ks, tk_arr, dP=None, hold='clear', vt=None):
+def full_sim(ks, tk_arr, dP=None, hold='clear', vt=None, kind=None):
     """
     Whole run in TRUE dynamics from the pre-fault equilibrium:
     pre-fault -> faulted on [t_fault, t_clear) -> pre-fault again.
@@ -145,12 +176,13 @@ def full_sim(ks, tk_arr, dP=None, hold='clear', vt=None):
     dP6 = model.scatter_dp(dP) if dP is not None else None
     n_steps = int(round(float(t_grid[-1]) / args.dt_true))
 
+    ramp, pk, ps = wd_params(kind, n)
     if args.cuda_graph and n == args.batch:
-        return _full_sim_cap(tf, tc, tk, t_off, Yf, dPm, dP6)
+        return _full_sim_cap(tf, tc, tk, t_off, Yf, dPm, dP6, ramp, pk, ps)
     # eager: build one-shot buffers, run the shared body
     b = dict(
         x=S.x0.to(torch.float32).unsqueeze(0).expand(n, N_STATE).clone(),
-        tf=tf, tc=tc, tk=tk, t_off=t_off,
+        tf=tf, tc=tc, tk=tk, t_off=t_off, ramp=ramp, pk=pk, ps=ps,
         dPm=dPm,
         dP=dP6 if dP6 is not None else torch.zeros(n, NG, device=device),
         traj=torch.zeros(n, n_steps + 1, NG, device=device),
@@ -167,12 +199,13 @@ _sim_graph = None
 _sim_buf = None
 
 
-def _full_sim_cap(tf, tc, tk, t_off, Yf, dPm, dP6):
+def _full_sim_cap(tf, tc, tk, t_off, Yf, dPm, dP6, ramp, pk, ps):
     """Copy the batch into the static buffers, replay the captured loop."""
     global _sim_graph, _sim_buf
     b = _sim_buf
     b['tf'].copy_(tf); b['tc'].copy_(tc)
     b['tk'].copy_(tk); b['t_off'].copy_(t_off)
+    b['ramp'].copy_(ramp); b['pk'].copy_(pk); b['ps'].copy_(ps)
     Mf_c, Nf_c = S.pe_consts(Yf)
     b['Mf'].copy_(Mf_c); b['Nf'].copy_(Nf_c)
     Mp_c, Np_c = S.pe_consts(S.Yred_pre.expand(tf.shape[0], NG, NG))
@@ -195,6 +228,8 @@ def _capture_sim(n_steps, n):
         tf=torch.zeros(n, device=device), tc=torch.zeros(n, device=device),
         tk=torch.full((n,), float(t_grid[-1]), device=device),
         t_off=torch.full((n,), float(t_grid[-1]) + 1.0, device=device),
+        ramp=torch.zeros(n, device=device), pk=torch.zeros(n, device=device),
+        ps=torch.zeros(n, device=device),
         Mf=torch.zeros(n, NG, NG, dtype=S.cdtype, device=device),
         Nf=torch.zeros(n, NG, NG, dtype=S.cdtype, device=device),
         Mp=torch.zeros(n, NG, NG, dtype=S.cdtype, device=device),
@@ -263,6 +298,7 @@ tot = dict(n=0, need=0, resc_true=0, resc_model=0, ok_true=0, ok_n=0, agree=0,
 norm_all, norm_need, norm_quiet = [], [], []
 age_t = [0] * len(AGE_BINS); age_m = [0] * len(AGE_BINS); age_n = [0] * len(AGE_BINS)
 by_type = {t: [0, 0] for t in TYPE_NAMES}
+by_type_run = {t: [0, 0] for t in TYPE_NAMES}
 # Q13: per-case record for the needy cases of every type, so the misses can be
 # cross-tabulated by true severity and by how much actuator authority was left
 # unused. Columns: [type, alpha, rescued, ||dP||, max|dP|/dp_max].
@@ -291,7 +327,8 @@ while n_done < args.n:
     dP = o['dP']
 
     tr_free, st_free = full_sim(ks, tk, None)
-    tr_ctrl, _ = full_sim(ks, tk, dP, hold=args.dp_hold, vt=valid_t)
+    tr_ctrl, _ = full_sim(ks, tk, dP, hold=args.dp_hold, vt=valid_t,
+                          kind=pred_kind(o))
     pk_free_t, pk_free_run = peaks_from(tr_free, tk, valid_t)
     pk_ctrl_t, pk_ctrl_run = peaks_from(tr_ctrl, tk, valid_t)
     pk_ctrl_m, _ = model.judged(o['w_ctrl'], b['vmask'])
@@ -326,6 +363,7 @@ while n_done < args.n:
 
     ag = tk - t_fault[ks]; nd = need.cpu().numpy()
     wt = win_t.cpu().numpy(); wm = win_m.cpu().numpy()
+    rok = (pk_ctrl_run <= model.limit).cpu().numpy()
     for i, (b0, b1) in enumerate(AGE_BINS):
         m = nd & (ag >= b0) & (ag < b1)
         if m.sum():
@@ -334,6 +372,7 @@ while n_done < args.n:
     for ti_, tname in enumerate(TYPE_NAMES):
         m = nd & (y_type[ks] == ti_ + 1)
         by_type[tname][0] += int(wt[m].sum()); by_type[tname][1] += int(m.sum())
+        by_type_run[tname][0] += int(rok[m].sum()); by_type_run[tname][1] += int(m.sum())
 
     # Q5 record, over every REACHABLE instant -- the population the control loss
     # is actually averaged over. p_fail uses the same expression as the loss:
@@ -573,6 +612,11 @@ json.dump({'split': args.split, 'n_instants': tot['n'], 'n_need': tot['need'],
            'harmed': tot['harmed'], 'healthy': tot['healthy'],
            'mean_dP': mean(norm_all), 'mean_dP_need': mean(norm_need),
            'mean_dP_quiet': mean(norm_quiet), 'dp_hold': args.dp_hold,
+           'dp_ramp': args.dp_ramp, 'dp_policy': args.dp_policy,
+           'gen_ramp': args.gen_ramp, 'load_pulse_k': args.load_pulse_k,
+           'load_pulse_s': args.load_pulse_s,
+           'by_type_full_run': {t: {'n': n, 'true': R(h, n)}
+                                for t, (h, n) in by_type_run.items()},
            'excluded_no_active_fault': tot['excluded'],
            'rescue_true_full_run': R(tot['resc_run'], tot['need']),
            'no_dp_full_run': R(tot['free_run'], tot['need']),
@@ -601,7 +645,9 @@ def select_plot_cases(ft, n_want, rng):
         o_ = model(b['feat'], b['x_meas'], hard=True, ctrl=True, vmask=b['vmask'])
     dP_ = o_['dP']
     trf, stf = full_sim(b['ks'], b['tk'], None)
-    trc, _ = full_sim(b['ks'], b['tk'], dP_, hold=args.dp_hold, vt=b['valid_t'])
+    kind_ = pred_kind(o_)
+    trc, _ = full_sim(b['ks'], b['tk'], dP_, hold=args.dp_hold, vt=b['valid_t'],
+                      kind=kind_)
     pf, _ = peaks_from(trf, b['tk'], b['valid_t'])
     pc, pc_run = peaks_from(trc, b['tk'], b['valid_t'])
     i_tk = torch.as_tensor(np.round(b['tk'] / args.dt_true).astype(int), device=device)
@@ -629,7 +675,8 @@ def select_plot_cases(ft, n_want, rng):
         for j in np.where(t)[0]:
             status[j] = name
     return [(int(b['ks'][j]), float(b['tk'][j]), float(b['valid_t'][j]),
-             dP_[j].cpu().numpy(), float(pf[j]), float(pc[j]), status[j])
+             dP_[j].cpu().numpy(), float(pf[j]), float(pc[j]), status[j],
+             kind_[j])
             for j in order[:n_want]]
 
 
@@ -651,12 +698,12 @@ h = args.dt_true
 COLORS = ['#1f77b4', '#d62728', '#2ca02c', '#9467bd', '#8c564b', '#e377c2']
 LW = [2.0, 2.0, 1.2, 1.2, 1.2, 1.2]
 for ft, cases in plot_pool.items():
-    for k, tkj, vtj, dPj, pf, pc, status_ in cases:
+    for k, tkj, vtj, dPj, pf, pc, status_, kindj in cases:
         ksa = np.array([k]); tka = np.array([tkj])
         dPt = torch.tensor(dPj, dtype=torch.float32, device=device).unsqueeze(0)
         tr_free = full_sim(ksa, tka, None)[0][0].cpu().numpy()
         tr_ctrl = full_sim(ksa, tka, dPt, hold=args.dp_hold,
-                           vt=np.array([vtj]))[0][0].cpu().numpy()
+                           vt=np.array([vtj]), kind=[kindj])[0][0].cpu().numpy()
         tt = np.arange(tr_free.shape[0]) * h
 
         fig, ax = plt.subplots(figsize=(13, 5.5))
