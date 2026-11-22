@@ -186,3 +186,26 @@ Script `reconnect_proto.py` → `reconnect_proto.json/.npz`, plots `reconnect_pr
 - **The peak after reconnection is the sag inherited at closing** and is identical across variants. The handoff only adds a small over-frequency (≤ 1.1e-3) and removes the long tail.
 - **Without a planned return**, the low-Ki baseline (Kp/Ki ≈ 15–40 s) leaves a 1.5e-3 pu frequency error at 12 s. G1 sits at about 0.45 pu, pushed up only by its own proportional response to the sag.
 - **Side finding:** G1 full trips already reach 0.0051–0.0052 pu *during* the disconnection under the §18 baseline. The baseline was tuned on partial losses only, so α = 1 G1 is needy against it.
+
+## 11. S20 (v1.4): α = 1 permanent disconnection, re-measured against the S18 baseline (2026-11-21; `disc_v14.py` → `disc_v14.json`)
+Plant: v13 (α = 1 never cleared within the 8 s run). Survivors' references stay at Pm0, so the S20 floating band equals the v1.2 rail. Cases: all 417 gen cases of the 1,200 at α = 1 (same machine and t_fault). Scoring: excluded. Simulink (`run_v13_sl('disc', ·, 2, 'v13x')`) matches Python: max |Δpeak| 1.4e-8, 0 flips.
+
+| Gains | G1 (223) in envelope | G1 peak | G1 t_s (1e-3 band) | G1 ω error at 8 s | G2 (194) | G2 peak |
+|---|---|---|---|---|---|---|
+| **S18 baseline (ceiling re-tune)** | **0.000** | **0.00515** | 5.75 s | 3.3e-3 | 1.000 | 0.00080 |
+| Pole placement (reference) | 0.000 | 0.00848 | 3.85 s | 0.9e-3 | 1.000 | 0.00100 |
+
+- **G1 α = 1 is needy against the baseline, but only marginally.** Its peak is 3 % over the limit, and every case has the same peak (t_fault does not matter with constant gains). The rail never binds. G2 α = 1 is never needy.
+- **Actionable.** Scaling the S18 gains up gives these G1 peaks:
+
+  | Gain scale | G1 peak | Rail binds |
+  |---|---|---|
+  | ×1.5 | 0.0038 | no |
+  | ×2 | 0.0030 | no |
+  | ×3 | 0.0021 | 1 % of the time |
+  | ×5 | 0.0016 | — |
+  | ×10 | 0.0013 | 2.7 % of the time |
+
+  The binding fraction stays ≤ 2.7 %, so the scheduler has headroom even with a modest gain change.
+- **The slow tail matters more than the peak.** Under the S18 gains (low Ki), G1 α = 1 is still 3.3e-3 pu off nominal at 8 s, with t_s 5.75 s. G1's 2.58 pu is carried mostly by proportional action, and the integrators take tens of seconds to take it over. Up to ×3 the gains stay outside the 1e-3 band through 8 s; ×5 settles in 0.63 s. This tail is part of the deviation and settling headline for the α = 1 class.
+- The α = 1 class therefore carries a small rescue-rate story (G1: 0 % → 100 % needs only about ×1.5), and a larger deviation and settling story.
