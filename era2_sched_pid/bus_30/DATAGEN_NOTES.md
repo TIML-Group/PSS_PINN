@@ -227,3 +227,29 @@ Plant: v13 (α = 1 never cleared within the 8 s run). Survivors' references stay
     - 29 entries are inactive.
 - **Diagnostic** (`diag_design_rule.py` → `diag_design_rule.json`): the closest-to-baseline tie-break still fails 20, so the targets conflict with the min-peak objective.
 - Options (a)–(c) are written in wiki §25. **The dataset is not generated.**
+
+## 13. S26 (v2.1) library build + dataset v2 (2026-11-22)
+**Library** (`build_library_v21.py` → `library_v21.json`, log `build_library_v21.log`). Runtime: 2,261 s, inside the 3 h cap.
+- **Method:** 62 entries × 2 seeds (pole-placed, S18 generalist), CMA-ES with population 16 × 40 generations each, stacked on CUDA (55k simulations per generation in stage A). Lexicographic objective: peak floor (hard; needy configurations must reach the envelope), then t_s, then effort. Stage A tuned R1/R1d; stage B tuned R2 against the chosen R1 entries. The winning seed per entry was picked on the full S24 verification grid.
+- **Result:** 60 of 62 pass. Seeds chosen: pole 31 / generalist 27 in stage A; pole 3 / generalist 1 in R2.
+  - **Gap vs the generalist:** median +33 % peak over the 33 active entries; 29 entries are inactive.
+  - **R1d G1:** peak 0.0052 → **0.0010** (in envelope 0 → 100 %), t_s 6.25 → 0 s.
+  - **Line 1:** 0.0044 → 0.0025 (in envelope 90 → 100 %).
+  - **R2 runback G1:** t_s 1.10 → 1.04 s.
+- **Fallback** (`finalize_library_v21.py`, the S26 "matching passes" rule): R1_load_30 (peak 0.0006 vs 0.0005) and R1_runback_G1 (−1.7 %) failed the floor on the full grid from both seeds, so both now use the generalist gains (gap 0).
+- **Structural flag:** R1_runback_G1 has rail-binding 6.3 % (> 5 %), even with the generalist. It is entirely the runback unit's own PID on deep runbacks (α ≥ 0.92); no other machine reaches the band. It needs Ashhar's reading of the rail rule (exclude the faulted unit, as in S15 scoring?).
+- **No-improvement:** R1_line_2 and R1_line_4 have a gap under 1 %.
+- **Bumpless:** the commanded jump at every switch is ≤ 4.4e-16.
+
+**Dataset v2** (`gen_dataset_v2.py` → `data_v2/`, 945 s, 31.7 GB, gitignored):
+- **Contents:** X (11000, 8001, 90) float32, plus `meta.npz` and `info.json`.
+  - **Main mix:** 10,000 scenarios (gen 3,399 / load 3,333 / line 3,268), seed 42.
+  - **α = 1 block:** 500 G1 + 500 G2, permanent disconnections.
+  - **Splits:** main 8000 / 1000 / 1000; α = 1 per machine 300 / 100 / 100.
+- **Input controller:** X is recorded under R0 = generalist gains, so it is the identification input; channels and noise follow era-1. Simulink cross-check of one line fault (`chan_check_sl.m`, `chan_check.json`): every channel's maximum |difference| is below its noise std (Pm 4.5e-3 vs 5e-3 after fixing a one-sample offset in the Pm record).
+- **Labels:** library pointers (lib_R1, lib_R2), switch events, and outcomes under the generalist and under the oracle schedule.
+- **Oracle vs generalist:**
+  - Main mix: 100 % vs 99.92 % in envelope; median peak gen 6.1e-4 → 0.9e-4, load 8.5e-4 → 6.0e-4.
+  - α = 1 G1: **0 % → 100 %** (peak 0.00515 → 0.00099).
+  - Overall in envelope: 100 % vs 95.4 %.
+  - y_ool (generalist out of envelope): 508 scenarios. Oracle rail-binding maximum: 4.6 %.

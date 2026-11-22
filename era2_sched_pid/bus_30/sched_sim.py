@@ -51,7 +51,9 @@ def simulate_sched(p, scen, G3, delay=0.0, record=False, rec_every=10, t_start=N
     le_x = peak.clone(); rail = peak.clone(); bump = peak.clone(); dps_ord = peak.clone()
     r_prev = torch.zeros(B, dtype=torch.long, device=dev)
     bidx = torch.arange(B, device=dev)
-    rec = {'t': [], 'w': [], 'Pm': []} if record else None
+    rec = {'t': [], 'w': [], 'Pm': [], 'd': [], 'Pmech': []} if record else None
+    if record and k0 == 0:                                            # include the t = 0 sample
+        rec['t'].append(0.0); rec['w'].append(w.clone()); rec['Pm'].append(Pm.clone()); rec['d'].append(d.clone()); rec['Pmech'].append(Pm.clone())
     for k in range(k0, n):
         t = k * h; tm = t + 0.5 * h
         r = torch.where(t >= t2 - 1e-9, 2, torch.where(t >= t1 - 1e-9, 1, 0))
@@ -96,6 +98,7 @@ def simulate_sched(p, scen, G3, delay=0.0, record=False, rec_every=10, t_start=N
         le_x = torch.where(dx > BAND, torch.full_like(dx, t + h), le_x)
         if record and k % rec_every == 0:
             rec['t'].append(t + h); rec['w'].append(w.clone()); rec['Pm'].append(Pm.clone())
+            rec['d'].append(d.clone()); rec['Pmech'].append(Pmech.clone())
     tf = bt['tf']
     out = dict(peak=peak, peak_excl=peak_x, tv=tv, ts=torch.clamp(le_x - tf, min=0.0),
                rail_frac=rail / (n - k0), bump=bump, dps_ordinary=dps_ord,
