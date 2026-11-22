@@ -1,0 +1,2 @@
+pole {'line_needy_cells': 58, 'needy_lines': {1: 58}, 'line_max_peak': 0.1321834732611329, 'line_cells_within_10pct': 4, 'G1_runback_grid_held': '40/54', 'G1_grid_max_peak_excl': 0.007644720079187262}
+v13x {'line_needy_cells': 9, 'needy_lines': {1: 9}, 'line_max_peak': 0.005283191135301735, 'line_cells_within_10pct': 30, 'G1_runback_grid_held': '54/54', 'G1_grid_max_peak_excl': 0.004402181346306655}

@@ -1,0 +1,26 @@
+start (pole placement): rates gen/load/line [0.815 1.    0.95 ]  J -0.8147
+gen   0  best J -0.8596  gen-best rates [0.86  1.    0.955]  sigma 0.475  (23 s)
+gen   5  best J -0.9998  gen-best rates [1. 1. 1.]  sigma 0.570  (82 s)
+gen  10  best J -0.9998  gen-best rates [1. 1. 1.]  sigma 0.525  (141 s)
+gen  15  best J -0.9998  gen-best rates [1. 1. 1.]  sigma 0.417  (199 s)
+gen  20  best J -0.9998  gen-best rates [1. 1. 1.]  sigma 0.370  (259 s)
+gen  25  best J -0.9998  gen-best rates [1. 1. 1.]  sigma 0.368  (318 s)
+gen  30  best J -0.9998  gen-best rates [1. 1. 1.]  sigma 0.311  (378 s)
+gen  35  best J -0.9998  gen-best rates [1. 1. 1.]  sigma 0.287  (436 s)
+gen  40  best J -0.9998  gen-best rates [1. 1. 1.]  sigma 0.248  (495 s)
+gen  45  best J -0.9998  gen-best rates [1. 1. 1.]  sigma 0.265  (554 s)
+gen  50  best J -0.9998  gen-best rates [1. 1. 1.]  sigma 0.226  (613 s)
+gen  55  best J -0.9998  gen-best rates [1. 1. 1.]  sigma 0.201  (673 s)
+gen  60  best J -0.9998  gen-best rates [1. 1. 1.]  sigma 0.168  (732 s)
+gen  65  best J -0.9998  gen-best rates [1. 1. 1.]  sigma 0.138  (793 s)
+gen  70  best J -0.9998  gen-best rates [1. 1. 1.]  sigma 0.152  (852 s)
+gen  75  best J -0.9998  gen-best rates [1. 1. 1.]  sigma 0.130  (912 s)
+gen  79  best J -0.9998  gen-best rates [1. 1. 1.]  sigma 0.126  (960 s)
+final tune-sample rates {'gen': np.float64(1.0), 'load': np.float64(1.0), 'line': np.float64(1.0)}
+gains
+ [[2.3678e+02 5.7800e+00 6.0000e-02]
+ [1.6250e+02 1.5530e+01 0.0000e+00]
+ [9.0790e+01 7.5400e+00 1.0000e-02]
+ [1.1343e+02 8.1400e+00 2.0000e-02]
+ [8.1760e+01 5.1900e+00 1.5000e+00]
+ [9.3590e+01 1.5550e+01 1.0000e-02]]

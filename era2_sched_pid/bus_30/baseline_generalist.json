@@ -1,0 +1,24 @@
+{
+ "actuator_hash": "69af36e693dd",
+ "n": 1200,
+ "seed": 7,
+ "acceptance_threshold": 0.85,
+ "in_envelope": 0.85,
+ "by_type": {
+  "gen": {
+   "n": 417,
+   "in_envelope": 0.5875299760191847
+  },
+  "load": {
+   "n": 394,
+   "in_envelope": 1.0
+  },
+  "line": {
+   "n": 389,
+   "in_envelope": 0.9794344473007712
+  }
+ },
+ "settled_1e3_at_8s": 0.9766666666666667,
+ "median_peak": 0.0013274439327661258,
+ "accepted": true
+}

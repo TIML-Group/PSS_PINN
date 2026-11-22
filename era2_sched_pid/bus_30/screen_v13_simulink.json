@@ -1,0 +1,110 @@
+{
+ "ev": {
+  "n_done": 1200,
+  "n": 1200,
+  "max_abs_dpeak_vs_python": 7.5585186537496796e-06,
+  "max_abs_dpeak_excl_vs_python": 7.5585186537496796e-06,
+  "verdict_flips_vs_python": 0,
+  "counted": {
+   "in_envelope": 0.8708333333333333,
+   "by_type": {
+    "gen": 0.6474820143884892,
+    "load": 1.0,
+    "line": 0.9794344473007712
+   },
+   "gen_by_machine": {
+    "G1": 0.34080717488789236,
+    "G2": 1.0
+   },
+   "max_dev_median": {
+    "gen": 0.002933016617753248,
+    "load": 0.0011494985000264912,
+    "line": 7.915730660701392e-05
+   }
+  },
+  "excluded": {
+   "in_envelope": 0.9208333333333333,
+   "by_type": {
+    "gen": 0.7913669064748201,
+    "load": 1.0,
+    "line": 0.9794344473007712
+   },
+   "gen_by_machine": {
+    "G1": 0.6098654708520179,
+    "G2": 1.0
+   },
+   "max_dev_median": {
+    "gen": 0.0012339449435737615,
+    "load": 0.0011494985000264912,
+    "line": 7.915730660701392e-05
+   }
+  },
+  "tv_median_gen": 2.076326834711415
+ },
+ "reach": {
+  "n_done": 57,
+  "n": 57,
+  "max_abs_dpeak_vs_python": 5.780255141196733e-08,
+  "max_abs_dpeak_excl_vs_python": 5.780255141196733e-08,
+  "verdict_flips_vs_python": 0,
+  "counted": {
+   "in_envelope": 0.38596491228070173,
+   "by_type": {
+    "gen": 0.38596491228070173
+   },
+   "gen_by_machine": {
+    "G1": 0.38596491228070173
+   },
+   "max_dev_median": {
+    "gen": 0.006215417079404872
+   }
+  },
+  "excluded": {
+   "in_envelope": 0.7017543859649122,
+   "by_type": {
+    "gen": 0.7017543859649122
+   },
+   "gen_by_machine": {
+    "G1": 0.7017543859649122
+   },
+   "max_dev_median": {
+    "gen": 0.003067337333708009
+   }
+  },
+  "tv_median_gen": 3.961573583873915
+ },
+ "disc": {
+  "n_done": 417,
+  "n": 417,
+  "max_abs_dpeak_vs_python": 5.780255141196733e-08,
+  "max_abs_dpeak_excl_vs_python": 5.780255141196733e-08,
+  "verdict_flips_vs_python": 0,
+  "counted": {
+   "in_envelope": 0.46522781774580335,
+   "by_type": {
+    "gen": 0.46522781774580335
+   },
+   "gen_by_machine": {
+    "G1": 0.0,
+    "G2": 1.0
+   },
+   "max_dev_median": {
+    "gen": 0.008481701559738819
+   }
+  },
+  "excluded": {
+   "in_envelope": 0.46522781774580335,
+   "by_type": {
+    "gen": 0.46522781774580335
+   },
+   "gen_by_machine": {
+    "G1": 0.0,
+    "G2": 1.0
+   },
+   "max_dev_median": {
+    "gen": 0.008481701559738819
+   }
+  },
+  "tv_median_gen": 3.9166762624940246
+ }
+}

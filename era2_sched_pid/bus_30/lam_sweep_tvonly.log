@@ -1,0 +1,15 @@
+C:\Users\rnoor\Documents\PSS_PINN\era2_sched_pid\bus_30\tune_anchors.py:59: RuntimeWarning: overflow encountered in exp
+  np.where(tk < s['t_clear'], 1.0, np.exp(-(tk - s['t_clear']) / tau)))
+  gen   0  median best J 1.139  (31 s)
+  gen  10  median best J 0.883  (210 s)
+  gen  20  median best J 0.837  (432 s)
+  gen  30  median best J 0.825  (655 s)
+  gen  40  median best J 0.789  (850 s)
+  gen  50  median best J 0.784  (1069 s)
+  gen  59  median best J 0.781  (1268 s)
+{'lam': 0.0, 'feasible': 15, 'ts_median': 0.0, 'tv_median': 4.3439267667489965, 'edge_riders': 0, 'margin_median': 0.8034543278625952, 'max_mult_median': 24.224504483041656, 'ts_seed_median': 0.7208967435254063, 'feasible_seed': 14}
+{'lam': 0.03, 'feasible': 15, 'ts_median': 0.0, 'tv_median': 2.7012245371476586, 'edge_riders': 0, 'margin_median': 0.8026885640149519, 'max_mult_median': 61.913071696021106, 'ts_seed_median': 0.7208967435254063, 'feasible_seed': 14}
+{'lam': 0.1, 'feasible': 15, 'ts_median': 0.0, 'tv_median': 2.3188886361683934, 'edge_riders': 0, 'margin_median': 0.8026885640149519, 'max_mult_median': 39.0202830688358, 'ts_seed_median': 0.7208967435254063, 'feasible_seed': 14}
+{'lam': 0.3, 'feasible': 15, 'ts_median': 0.0, 'tv_median': 2.1139989617820545, 'edge_riders': 1, 'margin_median': 0.8026885640149519, 'max_mult_median': 26.503631129321747, 'ts_seed_median': 0.7208967435254063, 'feasible_seed': 14}
+{'lam': 1.0, 'feasible': 15, 'ts_median': 0.0, 'tv_median': 1.351505546500027, 'edge_riders': 2, 'margin_median': 0.8026885640149519, 'max_mult_median': 211.40039659160325, 'ts_seed_median': 0.7208967435254063, 'feasible_seed': 14}
+done in 1291 s
