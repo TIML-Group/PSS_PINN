@@ -1,0 +1,13 @@
+closed-loop pre-fault network: min decay [1/s], min zeta, slowest pole
+  pole  decay 0.502  zeta 0.299  slowest -0.502+0.000j
+  s18   decay 0.072  zeta 0.418  slowest -0.072+0.000j
+  pole common-mode estimate -sum(Ki)/sum(D+Kp) = -0.463 1/s
+  s18 common-mode estimate -sum(Ki)/sum(D+Kp) = -0.072 1/s
+  pole line configs: min decay over 33 = 0.501, max = 0.508
+  s18 line configs: min decay over 33 = 0.071, max = 0.073
+load: relative change of K across alpha 0.1->1.0: median 0.019, max 0.022 (bus 29)
+load (s18 gains): slowest decay across alpha, per-bus range max 0.0012
+  R1d G1 pole: min decay 0.581  min zeta 0.277
+  R1d G1 s18: min decay 0.095  min zeta 0.404
+  R1d G2 pole: min decay 0.488  min zeta 0.303
+  R1d G2 s18: min decay 0.064  min zeta 0.425
