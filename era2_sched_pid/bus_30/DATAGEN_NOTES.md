@@ -209,3 +209,21 @@ Plant: v13 (α = 1 never cleared within the 8 s run). Survivors' references stay
   The binding fraction stays ≤ 2.7 %, so the scheduler has headroom even with a modest gain change.
 - **The slow tail matters more than the peak.** Under the S18 gains (low Ki), G1 α = 1 is still 3.3e-3 pu off nominal at 8 s, with t_s 5.75 s. G1's 2.58 pu is carried mostly by proportional action, and the integrators take tens of seconds to take it over. Up to ×3 the gains stay outside the 1e-3 band through 8 s; ×5 settles in 0.63 s. This tail is part of the deviation and settling headline for the α = 1 class.
 - The α = 1 class therefore carries a small rescue-rate story (G1: 0 % → 100 % needs only about ×1.5), and a larger deviation and settling story.
+
+## 12. S24 λc sweep and library build, stopped by the S23 stop rule (2026-11-22)
+- **Sweep:** `lamc_sweep.py` → `lamc_sweep.json` and `lamc_sweep_table.md`.
+  - Targets frozen in `targets_v2.json`: R1 ζ 0.5 / λc −0.5; R1d and R2 ζ 0.5 / λc −1.0.
+  - ζ 0.3 rejected: line 1 loses synchronism and binds the rail. λc −2 rejected: infeasible.
+- **New code:**
+  - `sched_sim.py`: per-regime gains plus bumpless integrator preload. It reproduces `plant_v2` exactly with constant gains (Δpeak 0.0).
+  - `library.py`: 63-configuration enumeration and pole design with the common-mode / inter-machine split; R1d is linearised at the post-loss angles.
+  - `build_library.py`: design → verify → repair (stacked CMA-ES) → final verify.
+- **Build run:** `build_library.log`, `library_v2.json`.
+  - Design took 113 s; verification took 24 s for about 12k runs.
+  - **Bumpless switching is exact:** the jump at a switch is ≤ 4e-16, against ordinary |ΔP_set| up to 0.034.
+  - **20 of 62 entries fail, above the 12-entry cap**, so the stop rule fired and nothing was repaired.
+    - 19 are worse than the baseline on peak, by 6–28 %.
+    - 2 are envelope losses; 1 has rail > 5 %.
+    - 29 entries are inactive.
+- **Diagnostic** (`diag_design_rule.py` → `diag_design_rule.json`): the closest-to-baseline tie-break still fails 20, so the targets conflict with the min-peak objective.
+- Options (a)–(c) are written in wiki §25. **The dataset is not generated.**

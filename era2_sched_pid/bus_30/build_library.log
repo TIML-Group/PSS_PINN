@@ -1,0 +1,7 @@
+designed 62 entries in 113s; max J 4.10e-05
+verification pass 1: 24s
+fail 20: ['R1_line_1', 'R1_line_2', 'R1_line_4', 'R1_line_6', 'R1_load_2', 'R1_load_3', 'R1_load_12', 'R1_load_14', 'R1_load_15', 'R1_load_16', 'R1_load_17', 'R1_load_18', 'R1_load_19', 'R1_load_20', 'R1_load_23', 'R1_load_24', 'R1_runback_G1', 'R1d_G1', 'R2_line', 'R2_runback_G1']
+no-improvement 2: ['R1_line_7', 'R1_load_21']
+inactive 29
+STOP: 20 failing entries > cap 12 -- revisit targets (S23 stop rule)
+FINAL: fails 20 ['R1_line_1', 'R1_line_2', 'R1_line_4', 'R1_line_6', 'R1_load_2', 'R1_load_3', 'R1_load_12', 'R1_load_14', 'R1_load_15', 'R1_load_16', 'R1_load_17', 'R1_load_18', 'R1_load_19', 'R1_load_20', 'R1_load_23', 'R1_load_24', 'R1_runback_G1', 'R1d_G1', 'R2_line', 'R2_runback_G1'] | no-improvement 2 ['R1_line_7', 'R1_load_21'] | repaired [] | 166s

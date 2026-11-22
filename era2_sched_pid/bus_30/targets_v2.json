@@ -1,0 +1,5 @@
+{"sigma_em": 0.5,
+ "R1":  {"zeta": 0.5, "lam_c": 0.5},
+ "R1d": {"zeta": 0.5, "lam_c": 1.0},
+ "R2":  {"zeta": 0.5, "lam_c": 1.0},
+ "source": "lamc_sweep.json (S24): zeta 0.3 rejected (loss of synchronism / rail on line 1); lam_c 2.0 rejected (design infeasible at zeta 0.5); lam_c per regime = lowest median t_s among feasible designs with full envelope"}
