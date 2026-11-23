@@ -33,12 +33,13 @@ def switch_times(scen, delay=0.0):
 
 
 @torch.no_grad()
-def simulate_sched(p, scen, G3, delay=0.0, record=False, rec_every=10, t_start=None):
-    """scen: list of scenario dicts; G3: (B, 3, NG, 3) array/tensor. Returns dict of numpy arrays."""
+def simulate_sched(p, scen, G3, delay=0.0, record=False, rec_every=10, t_start=None, t_sw=None):
+    """scen: list of scenario dicts; G3: (B, 3, NG, 3) array/tensor. Returns dict of numpy arrays.
+    t_sw: optional (t1, t2) per-scenario switch-time arrays overriding switch_times(scen, delay)."""
     c, dev, dt, h = p.c, p.device, p.dtype, H_STEP
     bt = p.batch(scen); B = bt['B']
     G3 = torch.as_tensor(np.asarray(G3), dtype=dt, device=dev)
-    t1, t2 = switch_times(scen, delay)
+    t1, t2 = switch_times(scen, delay) if t_sw is None else (np.asarray(t_sw[0], float), np.asarray(t_sw[1], float))
     t1 = torch.as_tensor(t1, dtype=dt, device=dev); t2 = torch.as_tensor(t2, dtype=dt, device=dev)
     if t_start is None:
         t_start = float(np.floor(min(s['t_fault'] for s in scen) / 0.05) * 0.05)
@@ -48,7 +49,7 @@ def simulate_sched(p, scen, G3, delay=0.0, record=False, rec_every=10, t_start=N
     Pm = p.Pm0.expand(B, NG).clone(); Ps_prev = Pm.clone()
     lo, hi = p.lo, p.hi
     peak = torch.zeros(B, dtype=dt, device=dev); peak_x = peak.clone(); tv = peak.clone()
-    le_x = peak.clone(); rail = peak.clone(); bump = peak.clone(); dps_ord = peak.clone()
+    le_x = peak.clone(); rail = peak.clone(); bump = peak.clone(); dps_ord = peak.clone(); rail_x = peak.clone()
     r_prev = torch.zeros(B, dtype=torch.long, device=dev)
     bidx = torch.arange(B, device=dev)
     rec = {'t': [], 'w': [], 'Pm': [], 'd': [], 'Pmech': []} if record else None
@@ -73,6 +74,7 @@ def simulate_sched(p, scen, G3, delay=0.0, record=False, rec_every=10, t_start=N
         Ps = torch.minimum(torch.maximum(Ps_raw, lo), hi)
         live_m = ~fz
         rail = rail + ((Ps != Ps_raw) & live_m).any(1).to(dt)
+        rail_x = rail_x + ((Ps != Ps_raw) & live_m & ~bt['own']).any(1).to(dt)   # S28: survivors only
         dps = torch.where(live_m, (Ps - Ps_prev).abs(), torch.zeros_like(Ps)).amax(1)
         bump = torch.where(sw, torch.maximum(bump, dps), bump)
         dps_ord = torch.where(~sw & (k > k0), torch.maximum(dps_ord, dps), dps_ord)
@@ -101,7 +103,7 @@ def simulate_sched(p, scen, G3, delay=0.0, record=False, rec_every=10, t_start=N
             rec['d'].append(d.clone()); rec['Pmech'].append(Pmech.clone())
     tf = bt['tf']
     out = dict(peak=peak, peak_excl=peak_x, tv=tv, ts=torch.clamp(le_x - tf, min=0.0),
-               rail_frac=rail / (n - k0), bump=bump, dps_ordinary=dps_ord,
+               rail_frac=rail / (n - k0), rail_frac_surv=rail_x / (n - k0), bump=bump, dps_ordinary=dps_ord,
                w_end=(w - 1).abs().amax(1))
     out = {k_: v.cpu().numpy() for k_, v in out.items()}
     if record:
