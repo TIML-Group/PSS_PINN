@@ -40,7 +40,7 @@ sync = torch.cuda.synchronize
 
 # ---------------------------------------------------------------- model + library --
 ck = torch.load(args.ckpt, map_location='cpu', weights_only=False)
-net = IdentNet(ck['variant'], ck['profile']); net.load_state_dict(ck['state']); net = net.to(dev).eval()
+net = IdentNet(ck['variant'], ck['profile'], ck.get('trunk', 'base')); net.load_state_dict(ck['state']); net = net.to(dev).eval()
 MU = torch.as_tensor(ck['feat_mu'], dtype=torch.float32, device=dev)
 SD = torch.as_tensor(ck['feat_sd'], dtype=torch.float32, device=dev)
 LIB = json.load(open('library_v21.json'))['entries']
@@ -130,7 +130,7 @@ def synced(fn, reps):
     return float(np.mean(ts)), float(np.median(ts)), float(np.percentile(ts, 90))
 
 
-res = dict(ckpt=args.ckpt, L_ms=round(float(net.L().detach()) * 1000, 1), reps=args.reps,
+res = dict(ckpt=args.ckpt, trunk=ck.get('trunk', 'base'), params=sum(q.numel() for q in net.parameters()), L_ms=round(float(net.L().detach()) * 1000, 1), reps=args.reps,
            gpu=torch.cuda.get_device_name(0), torch=torch.__version__)
 with torch.no_grad():
     for B in args.batch:

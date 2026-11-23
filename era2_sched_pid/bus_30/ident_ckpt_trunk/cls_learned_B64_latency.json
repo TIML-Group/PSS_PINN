@@ -1,0 +1,23 @@
+{
+ "ckpt": "ident_ckpt_trunk/cls_learned_B64.pt",
+ "trunk": "B64",
+ "params": 277245,
+ "L_ms": 75.4,
+ "reps": 100,
+ "gpu": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+ "torch": "2.12.0.dev20260408+cu128",
+ "B1": {
+  "stage_gather_ms": 0.051700000767596066,
+  "stage_featurize_ms": 0.16320000577252358,
+  "stage_mlp_ms": 0.2861499960999936,
+  "stage_lookup_ms": 0.027399990358389914,
+  "stage_pid_update_ms": 0.2334000018890947,
+  "eager_mean_ms": 0.8789050005725585,
+  "eager_median_ms": 0.8723999999347143,
+  "eager_p90_ms": 0.961730012204498,
+  "graph_mean_ms": 0.09841599996434525,
+  "graph_median_ms": 0.09960000170394778,
+  "graph_p90_ms": 0.1021100033540279,
+  "graph_maxdiff": 0.0
+ }
+}

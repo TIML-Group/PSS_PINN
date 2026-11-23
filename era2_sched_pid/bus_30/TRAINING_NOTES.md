@@ -115,3 +115,56 @@ Each cell is scheduled (delayed oracle / oracle / generalist), then the schedule
 - **Notes.**
   - The era-1 profilers (`bus_9`, `bus_30` `profile_latency.py`) crash in the graph section when it is run without `--dt_roll` / `--n_roll` overrides: a duplicate `eager_ms` keyword. The 10 ms columns were run with explicit `--dt_roll 0.01 --n_roll 150` (9-bus) or a scratch copy with the duplicate removed (30-bus). The repo files are unchanged.
   - §31 item 3: the 30-bus era-1 profiler's loader (`case30_common.Setup`) already works.
+
+## Spec v1.1 trunk-shrink ablations (2026-11-23)
+V-CLS only (V-REG failed in v1.0), with the same splits, profiles, latch protocol, loss, optimiser and epochs as v1.0. One definition in `ident_model.py` (`TRUNKS`), with `train_ident_v2.py --trunk`. Checkpoints: `ident_ckpt_trunk/`. True-dynamics evaluation: `ident_eval_trunk.json`. Latency: `ident_ckpt_trunk/*_latency.json` (the §31 harness).
+
+**Trunks**
+- **A, temporal pooling:** a shared per-step MLP (192 × 4) on [32-dim projection | elapsed / L_max], then mask-weighted mean + soft-masked max over the observed steps, then the heads. **143,613 parameters (16× fewer).**
+- **B, narrow flatten, the spec shape 128 × 3:** **567,997 parameters.** The spec's "~0.25 M" doesn't fit this shape, because the first layer alone is 4096 × 128 = 524 k.
+- **B64, flatten at 64 × 3:** 277,245 parameters, which matches the ~0.25 M target. Trained at the learned profile only.
+
+**Results** (test split, true dynamics). Bar 3 is judged against the delayed oracle (§30). Headline = generalist → scheduled change in median peak, per class (runback / load / line / α = 1 G1 / α = 1 G2).
+
+| Model | Params | L [ms] | ID acc | α-MAE | Bar 1 | Bar 2 (α = 1 G1) | Bar 3 (delayed) | Headline |
+|---|---|---|---|---|---|---|---|---|
+| cls_learned (base, design of record) | 2.34 M | 57 | 99.58 % | 0.018 | pass | 100 % | pass | −32.1 / −13.3 / −2.1 / −6.2 / −35.1 % |
+| **cls_learned_A** | **0.14 M** | **28** | **100 %** | **0.008** | line (+3.3 %, 2e-6 pu, the same class as cls_32) | **100 %** | pass | **−32.5 / −20.8 / +3.3 / −32.2 / −63.0 %** |
+| cls_64_A | 0.14 M | 64 | 100 % | 0.006 | pass | 100 % | pass | = cls_64 |
+| cls_32_A / 128_A / none_A | 0.14 M | 32 / 128 / 256 | 99.92 / 100 / 99.92 % | ≤ 0.008 | as base at the same L | as base (100 / 0 / 0 %) | pass | = base at the same L |
+| cls_learned_B | 0.57 M | **78** | 99.33 % | 0.017 | pass | **0 %** | pass | −19.5 / −8.4 / −5.6 / −1.4 / −20.7 % |
+| cls_32/64/128/none_B | 0.57 M | fixed | 99.33–100 % | ≤ 0.019 | as base | as base | pass | = base at the same L |
+| cls_learned_B64 | 0.28 M | **75** | 99.67 % | 0.019 | pass | **0 %** | pass | −21.3 / −8.9 / −5.2 / −1.6 / −22.5 % |
+
+**e2e latency** (batch 1, the §31 harness, same GPU):
+
+| Model | Eager [ms] | Graph replay [ms] |
+|---|---|---|
+| base | 1.17 | 0.133 |
+| A | 1.14 | 0.137 |
+| B | 0.91 | 0.090 |
+| B64 | 0.88 | 0.098 |
+
+**Findings**
+1. **The trunk size doesn't limit identification.** A (16× smaller) is the most accurate model trained: 99.9–100 %, zero abstentions, and α-MAE 0.006–0.008, which is 2–3× better than the 384 × 6 base. The pooling plus elapsed-time input suits the onset-aligned task.
+2. **Peaks depend on L only.** Every model has scheduled = delayed oracle, so at a fixed profile all trunks give identical peaks. The trunk matters only through accuracy and through the window the learned profile settles on.
+3. **The learned window is not trunk-invariant at λ_win = 0.05.** It settles at A 28 ms, base 57 ms, B 78 ms, B64 75 ms.
+   - At 75–78 ms the α = 1 G1 rescue is lost (peak 0.00507–0.00508 > limit), so **learned-B and learned-B64 fail bar 2**.
+   - learned-A's 28 ms gives the best peaks of any model (α = 1 G1 0.00349, −32 %), with the same 2e-6 pu line bar-1 miss as cls_32.
+4. **Candidates per the spec's tie rule:**
+   - **cls_64_A** ties the base exactly on bars 1–3, with 16× fewer parameters.
+   - **cls_learned_A** passes bars 2–3, misses bar 1 on line by the margin §30 called rounding noise, and has better peaks than the design of record.
+5. **Latency barely moves** (0.09–0.14 ms graph across 0.14–2.34 M parameters). The decision is launch-bound, so the trunk-size argument is parameters and accuracy, not wall-clock.
+
+**New finding (affects §29 too): the bumpless transfer is not bumpless under delayed entry.**
+- **Oracle switching (L = 0):** the switch-step jump is 0 in every class, so bumpless is exact, as verified in §27.
+- **Switching at L = 57 ms (the same for every trunk):** the incoming integrator preload hits the static band clamp (Pm0 ± 1). A large e times stiff R1 gains puts I′ outside the band, so the commanded power jumps in one 1 ms step.
+
+| Class (L = 57 ms) | Switch-step jump, median / max [pu] | Ordinary-step change, median / max [pu] |
+|---|---|---|
+| α = 1 G1 | **0.90 / 0.90** | 0.29 / 0.29 |
+| Gen runback | 0 / 0.94 | 0.03 / 0.89 |
+| Line | 0 / 0.97 | 0 / 1.37 |
+
+- This is above §23's 0.05 bump criterion. It was in `ident_eval.json` (`bump_max`) but not reported in §29.
+- It doesn't change any peak reported: the simulations include it. It is the same library-verification gap as the R2_line item (entries verified on oracle-entry states only), and it extends §30(d)'s re-verification to the **R1 entries** under delayed entry.

@@ -36,11 +36,14 @@ import torch.nn as nn
 
 import sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'bus_30'))
-from pinn_model30 import MLPBlock, HIDDEN, MLP_LAYERS  # noqa: E402
+from pinn_model30 import HIDDEN, MLP_LAYERS  # noqa: E402
+from ident_model import IdentNet, TRUNKS  # noqa: E402  (single model definition)
 
 ap = argparse.ArgumentParser()
 ap.add_argument('--variant', choices=['cls', 'reg'], required=True)
 ap.add_argument('--profile', required=True, help="32 | 64 | 128 | none | learned")
+ap.add_argument('--trunk', default='base', choices=['base', 'A', 'B', 'B64'],
+                help='base = 384x6 design of record; A/B/B64 = spec v1.1 trunk-shrink ablations (ident_model.TRUNKS)')
 ap.add_argument('--data', default='data_v2')
 ap.add_argument('--epochs', type=int, default=300)
 ap.add_argument('--patience', type=int, default=40)
@@ -62,7 +65,7 @@ NG, NB = 6, 30
 torch.manual_seed(args.seed); np.random.seed(args.seed)
 dev = 'cuda'
 os.makedirs(args.out, exist_ok=True)
-tag = f'{args.variant}_{args.profile}'
+tag = f'{args.variant}_{args.profile}' + ('' if args.trunk == 'base' else f'_{args.trunk}')
 t0 = time.time()
 
 # ---- data ----
@@ -137,42 +140,6 @@ wc = np.where(counts > 0, counts ** -0.5, 0.0); wc = wc / wc[counts > 0].mean()
 W_CLS = torch.as_tensor(wc, dtype=torch.float32, device=dev)
 
 
-class IdentNet(nn.Module):
-    def __init__(self, variant, profile):
-        super().__init__()
-        self.variant, self.profile = variant, profile
-        self.proj = nn.Linear(NF, PROJ, bias=False); nn.init.xavier_normal_(self.proj.weight)
-        self.trunk = MLPBlock(W_STEPS * PROJ, HIDDEN, MLP_LAYERS)
-        if variant == 'cls':
-            self.head_c = nn.Linear(HIDDEN, 59); self.head_a = nn.Linear(HIDDEN, 1)
-        else:
-            self.head_g = nn.Linear(HIDDEN, 36)
-        for m in self.modules():
-            if isinstance(m, nn.Linear) and m is not self.proj and m.bias is not None and m.out_features in (59, 1, 36):
-                nn.init.xavier_normal_(m.weight, gain=0.1); nn.init.zeros_(m.bias)
-        self.register_buffer('elapsed', (torch.arange(W_STEPS) + 1).float() * DT_W)   # end of each sample bin
-        self.register_buffer('beta', torch.tensor(BETA0))
-        if profile == 'learned':
-            f = L_INIT / L_MAX
-            self.raw_L = nn.Parameter(torch.tensor(float(np.log(f / (1 - f)))))
-        else:
-            self.register_buffer('L_fixed', torch.tensor(L_MAX if profile == 'none' else float(profile) / 1000))
-
-    def L(self):
-        return L_MAX * torch.sigmoid(self.raw_L) if self.profile == 'learned' else self.L_fixed
-
-    def mask(self):
-        if self.profile == 'learned':
-            return torch.sigmoid((self.L() - self.elapsed + 0.5 * DT_W) / self.beta)
-        return (self.elapsed <= self.L() + 1e-9).float()
-
-    def forward(self, x):
-        z = self.trunk(self.proj(x * self.mask().view(1, -1, 1)).flatten(1))
-        if self.variant == 'cls':
-            return dict(logits=self.head_c(z), alpha=torch.sigmoid(self.head_a(z).squeeze(-1)))
-        return dict(logg=self.head_g(z))
-
-
 def loss_fn(net, o, b):
     if net.variant == 'cls':
         ce = nn.functional.cross_entropy(o['logits'], b['c'], weight=W_CLS)
@@ -199,7 +166,8 @@ def evaluate(net, D):
     return tot / n, (corr / n if net.variant == 'cls' else None)
 
 
-net = IdentNet(args.variant, args.profile).to(dev)
+net = IdentNet(args.variant, args.profile, args.trunk).to(dev)
+print(f'{tag}: trunk {args.trunk} {TRUNKS[args.trunk]}, {sum(p.numel() for p in net.parameters())} params', flush=True)
 opt = torch.optim.Adam(net.parameters(), lr=LR)
 sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, args.epochs, eta_min=LR_MIN)
 best, best_ep, wait, hist = np.inf, -1, 0, []
@@ -214,10 +182,10 @@ for ep in range(args.epochs):
         opt.zero_grad(); l.backward(); opt.step()
     sched.step()
     vl, vacc = evaluate(net, D_va)
-    hist.append(dict(ep=ep, val=vl, val_acc=vacc, L=float(net.L())))
+    hist.append(dict(ep=ep, val=vl, val_acc=vacc, L=float(net.L().detach())))
     if vl < best - 1e-5:
         best, best_ep, wait = vl, ep, 0
-        BEST = dict(state={k: v.detach().cpu().clone() for k, v in net.state_dict().items()}, variant=args.variant,
+        BEST = dict(state={k: v.detach().cpu().clone() for k, v in net.state_dict().items()}, variant=args.variant, trunk=args.trunk,
                     profile=args.profile, L=float(net.L()), feat_mu=MU, feat_sd=SD, cfg=CFG, lib_names=names, epoch=ep,
                     val=vl, val_acc=vacc, consts=dict(DT_W=DT_W, W_STEPS=W_STEPS, PROJ=PROJ, LAM_A=LAM_A,
                                                        LAM_WIN=LAM_WIN, HIDDEN=HIDDEN, MLP_LAYERS=MLP_LAYERS,

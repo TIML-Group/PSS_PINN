@@ -16,6 +16,7 @@ in-envelope rate), (2) alpha = 1 G1 rescue = oracle's (100 %), (3) median peak w
 confusion, alpha-MAE, switching-delay cost, wrong-schedule cost (misidentified cases: scheduled vs delayed
 oracle), effort (TV, survivors' rail-binding, bump). Writes ident_eval.json and ident_eval.md.
 """
+import argparse
 import glob
 import json
 import os
@@ -26,6 +27,11 @@ import torch
 from ident_model import IdentNet, featurize, W_STEPS
 from sched_sim import make_plant, simulate_sched
 from plant_v2 import LIMIT, NG
+
+ap = argparse.ArgumentParser()
+ap.add_argument('--ckpt_dir', default='ident_ckpt')
+ap.add_argument('--out', default='ident_eval', help='writes <out>.json and <out>.md')
+args = ap.parse_args()
 
 md = np.load('data_v2/meta.npz')
 WON = np.load('data_v2/ident_windows.npz')['on']
@@ -58,7 +64,7 @@ def family_r2(c):
 
 
 def predict(ck):
-    net = IdentNet(ck['variant'], ck['profile']).cuda(); net.load_state_dict(ck['state']); net.eval()
+    net = IdentNet(ck['variant'], ck['profile'], ck.get('trunk', 'base')).cuda(); net.load_state_dict(ck['state']); net.eval()
     x = torch.as_tensor((featurize(WON[te]) - ck['feat_mu']) / ck['feat_sd'], dtype=torch.float32, device='cuda')
     with torch.no_grad():
         o = net(x)
@@ -83,16 +89,16 @@ tc_safe = np.where(blk == 1, np.inf, tc)
 true_g1 = np.stack([G[names[i]] for i in md['lib_R1'][te]])
 true_g2 = np.stack([G[names[i]] if i >= 0 else g18 for i in true_r2])
 res, delayed_cache = {}, {}
-for f in sorted(glob.glob('ident_ckpt/*.pt')):
+for f in sorted(glob.glob(os.path.join(args.ckpt_dir, '*.pt'))):
     ck = torch.load(f, map_location='cpu', weights_only=False)
-    tag = f"{ck['variant']}_{ck['profile']}"
+    tag = f"{ck['variant']}_{ck['profile']}" + ('' if ck.get('trunk', 'base') == 'base' else '_' + ck['trunk'])
     pr = predict(ck)
     o = run(pr['g1'], pr['g2'], pr['L'])
     if pr['L'] not in delayed_cache:
         delayed_cache[pr['L']] = run(true_g1, true_g2, pr['L'])
     od = delayed_cache[pr['L']]
     pk, pkd = o['peak_excl'], od['peak_excl']
-    row = dict(L_ms=pr['L'] * 1000, val=float(ck['val']), epoch=int(ck['epoch']), groups={})
+    row = dict(trunk=ck.get('trunk', 'base'), params=sum(q.numel() for q in IdentNet(ck['variant'], ck['profile'], ck.get('trunk', 'base')).parameters()), L_ms=pr['L'] * 1000, val=float(ck['val']), epoch=int(ck['epoch']), groups={})
     if ck['variant'] == 'cls':
         ok = pr['cls'] == true_cls
         row['config_acc'] = float(ok.mean())
@@ -134,7 +140,7 @@ for f in sorted(glob.glob('ident_ckpt/*.pt')):
     print(tag, f"L {row['L_ms']:.0f} ms", f"acc {row.get('config_acc', row.get('within5pct')):.4f}",
           'bars', row['all_bars'], ' | ', ' '.join(f"{g}: {v['median_peak']['scheduled']:.5f}({v['median_peak']['oracle']:.5f}) env {v['in_env']['scheduled']:.2f}"
                                                    for g, v in row['groups'].items()), flush=True)
-json.dump(res, open('ident_eval.json', 'w'), indent=1)
+json.dump(res, open(args.out + '.json', 'w'), indent=1)
 
 # markdown summary
 L = ['| Model | L [ms] | ID acc | all bars | ' + ' | '.join(f'{g}: sched / oracle / gen median peak, in-env' for g in GROUPS) + ' |',
@@ -144,4 +150,4 @@ for tag, r in res.items():
     L.append(f"| {tag} | {r['L_ms']:.0f} | {acc:.4f} | {'yes' if r['all_bars'] else 'no'} | " + ' | '.join(
         f"{v['median_peak']['scheduled']:.5f} / {v['median_peak']['oracle']:.5f} / {v['median_peak']['generalist']:.5f}, {v['in_env']['scheduled']:.2f}"
         for v in r['groups'].values()) + ' |')
-open('ident_eval.md', 'w', encoding='utf-8').write('\n'.join(L) + '\n')
+open(args.out + '.md', 'w', encoding='utf-8').write('\n'.join(L) + '\n')
