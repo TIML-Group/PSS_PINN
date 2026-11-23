@@ -78,3 +78,40 @@ Each cell is scheduled (delayed oracle / oracle / generalist), then the schedule
 - (c) The design-of-record profile: cls_32 (best peaks; line bar 1 fails by 1.7e-6 pu) or cls_learned (57 ms, passes bars 1–2).
 - (d) Re-verify the R2 entries under delayed entry states.
 - (e) Checkpoint policy: commit all 10 (about 95 MB) or only the design of record.
+
+## §31 End-to-end decision latency (2026-11-22, work order §31)
+- **Machine:** NVIDIA RTX 5070 Ti Laptop GPU. Every column was measured on this machine with the era-1 protocol: warm state, 100 reps, host-synced eager, whole-decision CUDA-graph replay.
+- **Scope:** controller architecture only; the observation window (57 ms) is **not** added.
+- **Script:** `profile_latency_e2e.py` (results in `profile_latency_e2e.json`). It times one decision for the design of record, cls_learned, along this path:
+  1. onset trigger: index into an on-GPU 2 ms ring buffer;
+  2. window gather (128 × 90);
+  3. era-1 featurize and normalise;
+  4. IdentNet;
+  5. argmax and library lookup (R1 + R2 family entry);
+  6. PID command update at the switch step (bumpless integrator preload + one PID step, 6 machines).
+- **Graph check:** max |diff| between graph and eager is 0.
+
+| Decision (batch 1) | Eager [ms] | Graph replay [ms] | Batch 256, eager / graph [ms] |
+|---|---|---|---|
+| **Era 2, cls_learned e2e (30-bus)** | **1.17** (median 1.14, p90 1.36) | **0.133** (p90 0.148) | 1.15 / 0.56 |
+| Era 1, 30-bus full decision, dt_roll = 100 ms | 88.1 | 11.8 | 101.7 / 35.1 |
+| Era 1, 30-bus full decision, dt_roll = 10 ms | 685.5 | 61.5 | 708.5 / 87.6 |
+| Era 1, 9-bus full decision, dt_roll = 100 ms (wiki: 85.6 / 20.0 at B256, other machine) | 74.5 | 8.7 | 80.4 / 12.7 |
+| Era 1, 9-bus full decision, dt_roll = 10 ms (wiki: 464.9 / 126.6 at B256) | 712.1 | 59.5 | 730.5 / 69.9 |
+| Era 1, 30-bus encoder-only dP (CUDA-event median) | 16.7 | 4.5 | 30.8 / 27.6 |
+
+- **Era-2 stage split** (eager, synced median, batch 1), in ms:
+
+  | Stage | Time [ms] |
+  |---|---|
+  | Gather | 0.05 |
+  | Featurize | 0.17 |
+  | MLP | 0.50 |
+  | Lookup | 0.03 |
+  | PID update | 0.29 |
+
+  Eager is launch-bound (about 1 ms of kernel launches); graph replay removes that, leaving 0.13 ms.
+- **Against the era-1 30-bus full decision at its operating point** (dt_roll = 100 ms, batch 1): era 2 is 75× faster eager (88.1 → 1.17 ms) and 89× faster in graph replay (11.8 → 0.133 ms). It has no rollout and no RK4 share; era 1 spends 93–99 % of its time in rollouts.
+- **Notes.**
+  - The era-1 profilers (`bus_9`, `bus_30` `profile_latency.py`) crash in the graph section when it is run without `--dt_roll` / `--n_roll` overrides: a duplicate `eager_ms` keyword. The 10 ms columns were run with explicit `--dt_roll 0.01 --n_roll 150` (9-bus) or a scratch copy with the duplicate removed (30-bus). The repo files are unchanged.
+  - §31 item 3: the 30-bus era-1 profiler's loader (`case30_common.Setup`) already works.
