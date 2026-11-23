@@ -1,0 +1,21 @@
+L =   0 ms: failing 1/62 {'worse_than_reference': 1}; bump max 0.000 (21s)
+    R2_runback_G1      ['worse_than_reference']  bump 0.000  med 1.192e+00 vs ref 1.173e+00  rail 0.000
+L =  28 ms: failing 7/62 {'bump>0.05': 6, 'worse_than_reference': 1}; bump max 0.983 (21s)
+    R1_line_1          ['bump>0.05']  bump 0.785  med 2.738e-03 vs ref 4.378e-03  rail 0.020
+    R1_line_7          ['bump>0.05']  bump 0.983  med 1.048e-03 vs ref 1.059e-03  rail 0.001
+    R1_line_10         ['bump>0.05']  bump 0.945  med 1.427e-03 vs ref 1.746e-03  rail 0.001
+    R1_runback_G2      ['bump>0.05']  bump 0.945  med 2.546e-04 vs ref 3.330e-04  rail 0.000
+    R1d_G1             ['bump>0.05']  bump 0.883  med 3.494e-03 vs ref 5.150e-03  rail 0.015
+    R1d_G2             ['bump>0.05']  bump 0.531  med 2.942e-04 vs ref 7.956e-04  rail 0.000
+    R2_runback_G1      ['worse_than_reference']  bump 0.000  med 1.192e+00 vs ref 1.173e+00  rail 0.000
+L =  57 ms: failing 10/62 {'bump>0.05': 9, 'worse_than_reference': 3, 'envelope_loss': 1, 'rail>5%': 1}; bump max 0.976 (21s)
+    R1_line_1          ['bump>0.05']  bump 0.976  med 2.975e-03 vs ref 4.378e-03  rail 0.022
+    R1_line_7          ['worse_than_reference', 'bump>0.05']  bump 0.971  med 1.102e-03 vs ref 1.059e-03  rail 0.001
+    R1_line_9          ['envelope_loss x2', 'worse_than_reference', 'bump>0.05']  bump 0.515  med 2.958e-03 vs ref 1.543e-03  rail 0.000
+    R1_line_10         ['bump>0.05']  bump 0.972  med 1.578e-03 vs ref 1.746e-03  rail 0.001
+    R1_runback_G2      ['bump>0.05']  bump 0.943  med 2.784e-04 vs ref 3.330e-04  rail 0.000
+    R1d_G1             ['bump>0.05']  bump 0.902  med 4.830e-03 vs ref 5.150e-03  rail 0.014
+    R1d_G2             ['bump>0.05']  bump 0.954  med 5.161e-04 vs ref 7.956e-04  rail 0.000
+    R2_line            ['rail>5%', 'bump>0.05']  bump 0.575  med 0.000e+00 vs ref 0.000e+00  rail 0.588
+    R2_runback_G1      ['worse_than_reference']  bump 0.000  med 1.192e+00 vs ref 1.173e+00  rail 0.000
+    R2_runback_G2      ['bump>0.05']  bump 0.926  med 0.000e+00 vs ref 0.000e+00  rail 0.000

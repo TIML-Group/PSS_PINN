@@ -168,3 +168,81 @@ V-CLS only (V-REG failed in v1.0), with the same splits, profiles, latch protoco
 
 - This is above §23's 0.05 bump criterion. It was in `ident_eval.json` (`bump_max`) but not reported in §29.
 - It doesn't change any peak reported: the simulations include it. It is the same library-verification gap as the R2_line item (entries verified on oracle-entry states only), and it extends §30(d)'s re-verification to the **R1 entries** under delayed entry.
+
+## §34(c) Delayed-entry re-verification and repair → library v2.2 (2026-11-23)
+
+**Method**
+- `reverify_delayed.py` reruns the §24 grid (same cases and references) with the R1 switch at t_f + L. R2 switches at max(t_clear, t_f + L), and never for α = 1.
+- Scoring is `build_library.score` with §28 survivors' rail-binding. Bump is the entry's own transfer: R1/R1d entries the switch into R1, R2 entries the switch into R2. `sched_sim` now logs `bump_r1` and `bump_r2` separately; the old single `bump` mixed the two.
+- Acceptance states are L = 0 (oracle entry) and L = 28 ms (cls_learned_A). L = 32, 57 and 64 ms are diagnostics only.
+- `repair_delayed.py` runs CMA-ES from the current entry (log-multipliers) with the frozen §26 budget: population 16 × 40 generations, σ0 0.3, ≤ 60 stride cases.
+  - Every case is simulated at both acceptance states.
+  - Hard terms: median floor, envelope, needy rule, rail ≤ 5 %, own bump ≤ 0.05.
+  - Main term: R1 median peak at 28 ms + 0.1 × at L = 0; R2 mean t_s.
+  - No softer-gains fallback and no slew.
+  - R1/R1d entries are repaired first, then the R2 entries still failing against the repaired R1 entries.
+  - An entry is accepted only if its full-grid failure count drops.
+- Runtime 71 min.
+
+**v2.1 re-verification** (62 entries)
+
+| L | failing | which |
+|---|---|---|
+| 0 | 1 | R2_runback_G1 t_s 1.192 vs reference 1.173 s (pre-existing: §27 finalize fell back R1_runback_G1 → generalist without re-verifying R2) |
+| 28 ms | 7 | bump > 0.05: R1_line_1 0.785, R1_line_7 0.983, R1_line_10 0.945, R1_runback_G2 0.945, R1d_G1 0.883, R1d_G2 0.531; + R2_runback_G1 |
+| 57 ms (diag.) | 10 | + R1_line_9 (envelope loss, worse), R2_line (rail 0.588, bump 0.575), R2_runback_G2 (bump 0.926) |
+
+**Repair** (grid entry median excluded peak in pu; R2 rows mean t_s in s)
+
+| Entry | Result | bump at 28 ms | median at L = 0 | median at 28 ms |
+|---|---|---|---|---|
+| R1_line_1 | accepted | 0.785 → 0.000 | 2.548e-3 → 2.574e-3 (+1 %) | 2.738e-3 → 2.719e-3 |
+| R1_line_7 | accepted | 0.983 → 0.049 | 9.52e-4 → 1.054e-3 (+11 %, ref 1.059e-3) | 1.048e-3 → 8.34e-4 (−20 %) |
+| R1_runback_G2 | accepted | 0.945 → 0.000 | 3.02e-4 → 2.53e-4 (−16 %) | 2.55e-4 → 2.34e-4 |
+| R1d_G2 | accepted | 0.531 → 0.044 | 2.5e-5 → 4.2e-5 (ref 7.96e-4) | 2.94e-4 → 3.07e-4 (+4 %) |
+| R2_runback_G1 | accepted | 0 → 0 | t_s 1.192 → 1.123 (ref 1.173) | same |
+| R2_runback_G2 | accepted (L = 0 fixed) | 1.941 → **0.104** | t_s 0 → 0 | bump at L = 0 1.737 → 0 |
+| R1_line_10 | **rejected** | 0.945 → 0.945 | — | — |
+| R1d_G1 | **rejected** | 0.883 → 0.603 (still > 0.05) | — | — |
+
+- R2_runback_G2 entered stage B only because repairing R1_runback_G2 created a new R1 → R2 bump. It passed at L = 0 on v2.1.
+
+**Final v2.2 verification**
+- **L = 0:** 0 failing, bump max 0.000.
+- **L = 28 ms:** 3 failing, all on bump: R1_line_10 0.945, R1d_G1 0.883, R2_runback_G2 0.104.
+- **L = 57 ms (diag.):** 7 failing. R1_line_7 and R1d_G2 bump again because they were repaired at 28 ms only; R1_line_9, R2_line, R1_line_10, R1d_G1, R2_runback_G2 also fail.
+
+**Is the remaining bump reachable by gains?** A uniform scale of the entry gains at L = 28 ms, all cases of the entry, gives:
+
+| Entry | ×0 | ×0.1 | ×0.3 | ×1 | ×3 |
+|---|---|---|---|---|---|
+| R1_line_10 (23 cases, all > 0.05 at ×1) | 0 | 0 | 0.945 | 0.945 | 0.984 |
+| R1d_G1 (α = 1 G1, 4 cases) | 0 | 0.416 | 0.846 | 0.883 | 0.941 |
+| R2_runback_G2 (254 cases) | 0 | 0 | 0 | 0.104 (1 %) | 0.842 |
+
+- **R1d_G1 is structural.** 28 ms after the G1 trip, Kp·e already exceeds the integrator band headroom, so the preload clamps. Even 0.1× gains bump 0.42 pu. Meeting 0.05 pu means effectively switching the controller off.
+  - Under §34's rules (no slew, no softer-gains fallback), this entry cannot pass at 28 ms. It needs a decision.
+- **R1_line_10** needs ≤ 0.1× gains, which is far outside the σ0 0.3 search (about 8σ) and would almost certainly lose the peak floor.
+- **R2_runback_G2** is a near miss (0.104 pu in 1 % of cases; ×0.3 is clean). More budget would very likely fix it.
+
+**cls_learned_A in true dynamics, library v2.1 → v2.2** (test split, oracle re-simulated with v2.2; `eval_ident_v2.py --lib --glob`, outputs `ident_eval_v22check_*.json`)
+
+| Class | median peak (dOrc) | bar 1 / # worse than gen | bump max (frac > 0.05) |
+|---|---|---|---|
+| Gen runback | 0.00044 → 0.00043 (= dOrc) | yes / 203 → 1 | 0.944 (47 %) → **0.158 (1 %)**, now R2 |
+| Load | 0.00067 (= dOrc) | yes / 13 → 5 | 0 → 0 |
+| Line | 0.00006 (= dOrc) | no (same 2e-6 pu miss) / 85 → 85 | 0.948 (12 %) → 0.945 (3 %) |
+| α = 1 G1 | 0.00349 (= dOrc) | yes / 0 | 0.883 (100 %) → 0.883 (100 %) |
+| α = 1 G2 | 0.00029 → 0.00031 | yes / 0 | 0.531 (100 %) → **0.044 (0 %)** |
+
+- Accuracy 100 %, bar 2 100 %, and bar 3 is scheduled = delayed oracle in every class.
+- Peaks are unchanged to within 2e-5 pu.
+- cls_64_A (64 ms) on v2.2 also keeps all its bars. Its α = 1 G2 bump stays at 0.95 because 64 ms is not an acceptance state. Line rail improves 0.69 → 0.02.
+
+**Open for the wiki owner**
+1. **R1d_G1 at 28 ms.** Gains cannot satisfy bump ≤ 0.05 without disabling control. Choose one:
+   - an exemption for α = 1 disconnections;
+   - a mechanism change: slew, or a preload that tolerates the band;
+   - accept and disclose.
+2. **R1_line_10 and R2_runback_G2.** Allow a wider or longer repair (σ0, generations) for these two, or disclose.
+3. **The 57 ms diagnostics** (R1_line_9 envelope loss, R2_line rail 0.59) are outside the acceptance states. They matter only if a 57 ms variant is ever deployed.

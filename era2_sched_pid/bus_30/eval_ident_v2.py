@@ -31,11 +31,13 @@ from plant_v2 import LIMIT, NG
 ap = argparse.ArgumentParser()
 ap.add_argument('--ckpt_dir', default='ident_ckpt')
 ap.add_argument('--out', default='ident_eval', help='writes <out>.json and <out>.md')
+ap.add_argument('--lib', default='library_v21.json', help='library; if not v2.1 the oracle reference is re-simulated with it')
+ap.add_argument('--glob', default='*.pt', help='checkpoint filename pattern inside --ckpt_dir')
 args = ap.parse_args()
 
 md = np.load('data_v2/meta.npz')
 WON = np.load('data_v2/ident_windows.npz')['on']
-LIB = json.load(open('library_v21.json'))['entries']
+LIB = json.load(open(args.lib))['entries']
 names = list(md['lib_names']); CFG = [n for n in names if n.startswith('R1')]
 G = {n: np.array(LIB[n]['gains']) for n in names}; g18 = G['R0']
 allg = np.stack([G[n] for n in names]); GLO, GHI = allg.min(0), allg.max(0)
@@ -88,8 +90,10 @@ def run(g1, g2, L):
 tc_safe = np.where(blk == 1, np.inf, tc)
 true_g1 = np.stack([G[names[i]] for i in md['lib_R1'][te]])
 true_g2 = np.stack([G[names[i]] if i >= 0 else g18 for i in true_r2])
+if args.lib != 'library_v21.json':                         # meta orc_* was simulated with v2.1
+    orc_pk = run(true_g1, true_g2, 0.0)['peak_excl']
 res, delayed_cache = {}, {}
-for f in sorted(glob.glob(os.path.join(args.ckpt_dir, '*.pt'))):
+for f in sorted(glob.glob(os.path.join(args.ckpt_dir, args.glob))):
     ck = torch.load(f, map_location='cpu', weights_only=False)
     tag = f"{ck['variant']}_{ck['profile']}" + ('' if ck.get('trunk', 'base') == 'base' else '_' + ck['trunk'])
     pr = predict(ck)
@@ -128,7 +132,9 @@ for f in sorted(glob.glob(os.path.join(args.ckpt_dir, '*.pt'))):
             wrong_schedule_cost_median=(float(np.median(pk[mis] - pkd[mis])) if mis.any() else 0.0),
             wrong_schedule_cost_max=(float((pk[mis] - pkd[mis]).max()) if mis.any() else 0.0),
             tv_median=float(np.median(o['tv'][m])), rail_surv_max=float(o['rail_frac_surv'][m].max()),
-            bump_max=float(o['bump'][m].max()))
+            bump_max=float(o['bump'][m].max()), bump_r1_max=float(o['bump_r1'][m].max()),
+            bump_r2_max=float(o['bump_r2'][m].max()), bump_frac_gt005=float((o['bump'][m] > 0.05).mean()),
+            delayed_oracle_bump_max=float(od['bump'][m].max()))
         gr = row['groups'][gname]
         gr['bar1_not_worse'] = bool(gr['median_peak']['scheduled'] <= gr['median_peak']['generalist'] * (1 + 1e-6)
                                     and gr['in_env']['scheduled'] >= gr['in_env']['generalist'])
