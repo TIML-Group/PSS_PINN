@@ -1,0 +1,37 @@
+{
+ "ckpt": "ident_ckpt_trunk/cls_learned_A.pt",
+ "trunk": "A",
+ "params": 143613,
+ "L_ms": 27.7,
+ "reps": 100,
+ "gpu": "AMD Radeon RX 6800 XT",
+ "torch": "2.9.1+rocmsdk20251207",
+ "B1": {
+  "stage_gather_ms": 0.1664000001255772,
+  "stage_featurize_ms": 0.3684499997689272,
+  "stage_mlp_ms": 1.0365499997533334,
+  "stage_lookup_ms": 0.12149999975008541,
+  "stage_pid_update_ms": 0.33235000000786385,
+  "eager_mean_ms": 1.709346000034202,
+  "eager_median_ms": 1.6322500005117035,
+  "eager_p90_ms": 1.937319999888132,
+  "graph_mean_ms": 0.51110599999447,
+  "graph_median_ms": 0.565199999982724,
+  "graph_p90_ms": 0.5860800002665201,
+  "graph_maxdiff": 0.0
+ },
+ "B256": {
+  "stage_gather_ms": 0.20730000005642069,
+  "stage_featurize_ms": 0.4745000001094013,
+  "stage_mlp_ms": 2.1332499995878607,
+  "stage_lookup_ms": 0.13635000004796893,
+  "stage_pid_update_ms": 0.37429999974847306,
+  "eager_mean_ms": 3.0213710000498395,
+  "eager_median_ms": 2.974149999772635,
+  "eager_p90_ms": 3.1566900001962495,
+  "graph_mean_ms": 1.7422050000004674,
+  "graph_median_ms": 1.7551000005369133,
+  "graph_p90_ms": 1.78169999999227,
+  "graph_maxdiff": 0.0
+ }
+}

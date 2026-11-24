@@ -1,0 +1,653 @@
+{
+ "ckpt": "ident_ckpt_trunk/cls_learned_A.pt",
+ "lib": "library_v23.json",
+ "trunk": "A",
+ "variant": "cls",
+ "profile": "learned",
+ "params": 143613,
+ "L_ms": 27.7,
+ "reps": 100,
+ "gpu": "AMD Radeon RX 6800 XT",
+ "torch": "2.9.1+rocmsdk20251207",
+ "note_static": "L/mask/pos/mean-mask-sum precomputed once OFF the timed path (L is a frozen inference parameter; a retrain must refresh them)",
+ "note_launch": "torch.profiler on this ROCm build exposes no launch-API events; launch_total=None, aten_ops_kernel (ops issuing >=1 GPU kernel) is the recorded fallback",
+ "note_maxdiff": "gpu_fused/cpu_pid outputs vs gpu_base; the featurize reassociation leaves up to ~5e-4 in normalised features and ~6e-3 in logits, argmax identical on every draw",
+ "gates_failed": [],
+ "maxdiff_tol": 0.0001,
+ "variants": {
+  "B1": {
+   "gather_assert_exact": true,
+   "burn": 6000,
+   "gpu_base": {
+    "eager_mean_ms": 1.6292579999935697,
+    "eager_median_ms": 1.5894500002104905,
+    "eager_p90_ms": 1.75325999953202,
+    "stage_gather_ms": 0.1571000002513756,
+    "stage_featurize_ms": 0.38069999936851673,
+    "stage_mlp_ms": 1.0193499997512845,
+    "stage_lookup_ms": 0.12234999985594186,
+    "stage_pid_ms": 0.3316000002087094,
+    "graph_mean_ms": 0.4758589999983087,
+    "graph_median_ms": 0.5590500004473142,
+    "graph_p90_ms": 0.5716699996810348,
+    "graph_vs_eager_maxdiff": 0.0
+   },
+   "gpu_fused": {
+    "eager_mean_ms": 1.4112760000170965,
+    "eager_median_ms": 1.3387500002863817,
+    "eager_p90_ms": 1.7391499996847415,
+    "maxdiff_vs_base": 7.275957614183426e-12,
+    "maxdiff_detail_vs_base": {
+     "out_Ps": 7.275957614183426e-12,
+     "out_I": 7.275957614183426e-12,
+     "out_g1": 0.0,
+     "out_g2": 0.0
+    },
+    "stage_gather_ms": 0.17500000012660166,
+    "stage_featurize_ms": 0.15355000005001784,
+    "stage_mlp_ms": 0.7663500000489876,
+    "stage_lookup_ms": 0.12130000050092349,
+    "stage_pid_ms": 0.321449999773904,
+    "graph_mean_ms": 0.34923499999422347,
+    "graph_median_ms": 0.36904999979014974,
+    "graph_p90_ms": 0.4745199998069438,
+    "graph_vs_eager_maxdiff": 0.0,
+    "graph_vs_base_maxdiff": 7.275957614183426e-12
+   },
+   "cpu_pid": {
+    "eager_mean_ms": 1.5070099999957165,
+    "eager_median_ms": 1.471300000048359,
+    "eager_p90_ms": 1.6701300000022457,
+    "maxdiff_vs_base": 7.275957614183426e-12,
+    "maxdiff_detail_vs_base": {
+     "out_Ps": 7.275957614183426e-12,
+     "out_I": 7.275957614183426e-12,
+     "out_g1": 0.0,
+     "out_g2": 0.0
+    },
+    "arm_graph_d2h_captured": true,
+    "arm_graph_capture_error": null,
+    "arm_graph_mean_ms": 0.2993499999956839,
+    "arm_graph_median_ms": 0.30525000011039083,
+    "arm_graph_p90_ms": 0.3446100003202446,
+    "gpugraph_plus_host_mean_ms": 0.5857230000310665,
+    "gpugraph_plus_host_median_ms": 0.5403000000114844,
+    "gpugraph_plus_host_p90_ms": 0.65965000039796,
+    "gpugraph_plus_host_maxdiff_vs_base": 7.275957614183426e-12
+   },
+   "diag_logits_maxdiff": 0.002959012985229492,
+   "diag_feat_maxdiff": 0.0004146397113800049,
+   "diag_argmax_mismatch": 0,
+   "diag_argmax_margin_min": 8.930216789245605,
+   "gpu_base_recheck": {
+    "eager_mean_ms": 1.6772219999984372,
+    "eager_median_ms": 1.603000000159227,
+    "eager_p90_ms": 1.82042000014917,
+    "graph_median_ms": 0.47150000000328873,
+    "graph_p90_ms": 0.57167000049958
+   },
+   "launches": {
+    "gpu_base": {
+     "launch_keys": {},
+     "launch_total": null,
+     "aten_ops_total": 202,
+     "aten_ops_kernel": 93,
+     "op_counts": [
+      [
+       "aten::as_strided",
+       37
+      ],
+      [
+       "aten::view",
+       23
+      ],
+      [
+       "aten::reshape",
+       16
+      ],
+      [
+       "aten::index",
+       10
+      ],
+      [
+       "aten::expand",
+       8
+      ],
+      [
+       "aten::linear",
+       7
+      ],
+      [
+       "aten::mul",
+       7
+      ],
+      [
+       "aten::sub",
+       7
+      ],
+      [
+       "aten::t",
+       7
+      ],
+      [
+       "aten::transpose",
+       7
+      ],
+      [
+       "aten::addmm",
+       6
+      ],
+      [
+       "aten::mul",
+       6
+      ],
+      [
+       "aten::copy_",
+       5
+      ],
+      [
+       "aten::sub",
+       5
+      ],
+      [
+       "aten::add",
+       4
+      ],
+      [
+       "aten::tanh",
+       4
+      ],
+      [
+       "aten::div",
+       3
+      ],
+      [
+       "aten::maximum",
+       3
+      ]
+     ],
+     "error": null
+    },
+    "gpu_fused": {
+     "launch_keys": {},
+     "launch_total": null,
+     "aten_ops_total": 146,
+     "aten_ops_kernel": 60,
+     "op_counts": [
+      [
+       "aten::as_strided",
+       28
+      ],
+      [
+       "aten::view",
+       15
+      ],
+      [
+       "aten::expand",
+       9
+      ],
+      [
+       "aten::reshape",
+       7
+      ],
+      [
+       "aten::linear",
+       6
+      ],
+      [
+       "aten::t",
+       6
+      ],
+      [
+       "aten::transpose",
+       6
+      ],
+      [
+       "aten::addmm",
+       5
+      ],
+      [
+       "aten::empty",
+       4
+      ],
+      [
+       "aten::copy_",
+       3
+      ],
+      [
+       "aten::index_select",
+       3
+      ],
+      [
+       "aten::mul_",
+       3
+      ],
+      [
+       "aten::resize_",
+       3
+      ],
+      [
+       "aten::select",
+       3
+      ],
+      [
+       "aten::sub",
+       3
+      ],
+      [
+       "aten::add",
+       2
+      ],
+      [
+       "aten::addcmul_",
+       2
+      ],
+      [
+       "aten::cat",
+       2
+      ]
+     ],
+     "error": null
+    },
+    "cpu_pid_gpu_arm": {
+     "launch_keys": {},
+     "launch_total": null,
+     "aten_ops_total": 124,
+     "aten_ops_kernel": 42,
+     "op_counts": [
+      [
+       "aten::as_strided",
+       23
+      ],
+      [
+       "aten::view",
+       17
+      ],
+      [
+       "aten::reshape",
+       11
+      ],
+      [
+       "aten::expand",
+       9
+      ],
+      [
+       "aten::linear",
+       6
+      ],
+      [
+       "aten::t",
+       6
+      ],
+      [
+       "aten::transpose",
+       6
+      ],
+      [
+       "aten::addmm",
+       5
+      ],
+      [
+       "aten::empty",
+       4
+      ],
+      [
+       "aten::tanh",
+       4
+      ],
+      [
+       "aten::cat",
+       3
+      ],
+      [
+       "aten::index_select",
+       3
+      ],
+      [
+       "aten::resize_",
+       3
+      ],
+      [
+       "aten::gather",
+       2
+      ],
+      [
+       "aten::mul_",
+       2
+      ],
+      [
+       "aten::sub_",
+       2
+      ],
+      [
+       "aten::_reshape_alias",
+       1
+      ],
+      [
+       "aten::_unsafe_view",
+       1
+      ]
+     ],
+     "error": null
+    }
+   }
+  },
+  "B256": {
+   "gather_assert_exact": true,
+   "burn": 6000,
+   "gpu_base": {
+    "eager_mean_ms": 2.9631980000067415,
+    "eager_median_ms": 2.9227999998511223,
+    "eager_p90_ms": 3.1021500000861124,
+    "stage_gather_ms": 0.20800000038434519,
+    "stage_featurize_ms": 0.4724499999610998,
+    "stage_mlp_ms": 2.093399999466783,
+    "stage_lookup_ms": 0.1229000004059344,
+    "stage_pid_ms": 0.35364999985176837,
+    "graph_mean_ms": 1.6817030000038358,
+    "graph_median_ms": 1.7541499996696075,
+    "graph_p90_ms": 1.7762999998012674,
+    "graph_vs_eager_maxdiff": 0.0
+   },
+   "gpu_fused": {
+    "eager_mean_ms": 2.4504820000311156,
+    "eager_median_ms": 2.4272499999824504,
+    "eager_p90_ms": 2.538299999832816,
+    "maxdiff_vs_base": 4.76837158203125e-07,
+    "maxdiff_detail_vs_base": {
+     "out_Ps": 4.76837158203125e-07,
+     "out_I": 2.384185791015625e-07,
+     "out_g1": 0.0,
+     "out_g2": 0.0
+    },
+    "stage_gather_ms": 0.19249999968451448,
+    "stage_featurize_ms": 0.25740000000951113,
+    "stage_mlp_ms": 1.7920000000231084,
+    "stage_lookup_ms": 0.12114999981349683,
+    "stage_pid_ms": 0.33830000029411167,
+    "graph_mean_ms": 1.5145170000050712,
+    "graph_median_ms": 1.5315499999815074,
+    "graph_p90_ms": 1.6329500000210828,
+    "graph_vs_eager_maxdiff": 0.0,
+    "graph_vs_base_maxdiff": 4.76837158203125e-07
+   },
+   "cpu_pid": {
+    "eager_mean_ms": 2.7091659999405238,
+    "eager_median_ms": 2.7038000002903573,
+    "eager_p90_ms": 2.8289200001381687,
+    "maxdiff_vs_base": 4.76837158203125e-07,
+    "maxdiff_detail_vs_base": {
+     "out_Ps": 4.76837158203125e-07,
+     "out_I": 2.384185791015625e-07,
+     "out_g1": 0.0,
+     "out_g2": 0.0
+    },
+    "arm_graph_d2h_captured": true,
+    "arm_graph_capture_error": null,
+    "arm_graph_mean_ms": 1.6026940000028844,
+    "arm_graph_median_ms": 1.6289999998662097,
+    "arm_graph_p90_ms": 1.6690700002072845,
+    "gpugraph_plus_host_mean_ms": 2.0177579999563022,
+    "gpugraph_plus_host_median_ms": 2.019449999806966,
+    "gpugraph_plus_host_p90_ms": 2.123940000001312,
+    "gpugraph_plus_host_maxdiff_vs_base": 4.76837158203125e-07
+   },
+   "diag_logits_maxdiff": 0.00565338134765625,
+   "diag_feat_maxdiff": 0.0005162656307220459,
+   "diag_argmax_mismatch": 0,
+   "diag_argmax_margin_min": 2.775205612182617,
+   "gpu_base_recheck": {
+    "eager_mean_ms": 2.9789149999578513,
+    "eager_median_ms": 2.927150000232359,
+    "eager_p90_ms": 3.081310000288795,
+    "graph_median_ms": 1.7591499999980442,
+    "graph_p90_ms": 1.7951600003470958
+   },
+   "launches": {
+    "gpu_base": {
+     "launch_keys": {},
+     "launch_total": null,
+     "aten_ops_total": 202,
+     "aten_ops_kernel": 93,
+     "op_counts": [
+      [
+       "aten::as_strided",
+       37
+      ],
+      [
+       "aten::view",
+       23
+      ],
+      [
+       "aten::reshape",
+       16
+      ],
+      [
+       "aten::mul",
+       13
+      ],
+      [
+       "aten::index",
+       10
+      ],
+      [
+       "aten::sub",
+       9
+      ],
+      [
+       "aten::expand",
+       8
+      ],
+      [
+       "aten::linear",
+       7
+      ],
+      [
+       "aten::t",
+       7
+      ],
+      [
+       "aten::transpose",
+       7
+      ],
+      [
+       "aten::addmm",
+       6
+      ],
+      [
+       "aten::copy_",
+       5
+      ],
+      [
+       "aten::div",
+       5
+      ],
+      [
+       "aten::add",
+       4
+      ],
+      [
+       "aten::slice",
+       4
+      ],
+      [
+       "aten::tanh",
+       4
+      ],
+      [
+       "aten::cat",
+       3
+      ],
+      [
+       "aten::minimum",
+       3
+      ]
+     ],
+     "error": null
+    },
+    "gpu_fused": {
+     "launch_keys": {},
+     "launch_total": null,
+     "aten_ops_total": 152,
+     "aten_ops_kernel": 61,
+     "op_counts": [
+      [
+       "aten::as_strided",
+       31
+      ],
+      [
+       "aten::view",
+       16
+      ],
+      [
+       "aten::expand",
+       10
+      ],
+      [
+       "aten::reshape",
+       7
+      ],
+      [
+       "aten::linear",
+       6
+      ],
+      [
+       "aten::t",
+       6
+      ],
+      [
+       "aten::transpose",
+       6
+      ],
+      [
+       "aten::addmm",
+       5
+      ],
+      [
+       "aten::copy_",
+       4
+      ],
+      [
+       "aten::empty",
+       4
+      ],
+      [
+       "aten::gather",
+       3
+      ],
+      [
+       "aten::index_select",
+       3
+      ],
+      [
+       "aten::mul_",
+       3
+      ],
+      [
+       "aten::resize_",
+       3
+      ],
+      [
+       "aten::select",
+       3
+      ],
+      [
+       "aten::sub",
+       3
+      ],
+      [
+       "aten::tanh",
+       3
+      ],
+      [
+       "aten::add",
+       2
+      ]
+     ],
+     "error": null
+    },
+    "cpu_pid_gpu_arm": {
+     "launch_keys": {},
+     "launch_total": null,
+     "aten_ops_total": 130,
+     "aten_ops_kernel": 43,
+     "op_counts": [
+      [
+       "aten::as_strided",
+       26
+      ],
+      [
+       "aten::view",
+       18
+      ],
+      [
+       "aten::reshape",
+       11
+      ],
+      [
+       "aten::expand",
+       10
+      ],
+      [
+       "aten::linear",
+       6
+      ],
+      [
+       "aten::t",
+       6
+      ],
+      [
+       "aten::transpose",
+       6
+      ],
+      [
+       "aten::addmm",
+       5
+      ],
+      [
+       "aten::empty",
+       4
+      ],
+      [
+       "aten::gather",
+       3
+      ],
+      [
+       "aten::index_select",
+       3
+      ],
+      [
+       "aten::resize_",
+       3
+      ],
+      [
+       "aten::tanh",
+       3
+      ],
+      [
+       "aten::cat",
+       2
+      ],
+      [
+       "aten::copy_",
+       2
+      ],
+      [
+       "aten::mul_",
+       2
+      ],
+      [
+       "aten::sub_",
+       2
+      ],
+      [
+       "aten::_reshape_alias",
+       1
+      ]
+     ],
+     "error": null
+    }
+   }
+  }
+ }
+}
