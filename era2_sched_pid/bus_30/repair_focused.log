@@ -1,0 +1,22 @@
+focused (S36b): repairing ['R2_runback_G2']
+  gen  0: R2_runback_G2 J 0.023 viol 0.000  (108s)
+  gen  5: R2_runback_G2 J 0.023 viol 0.000  (327s)
+  gen 10: R2_runback_G2 J 0.023 viol 0.000  (548s)
+  gen 15: R2_runback_G2 J 0.023 viol 0.000  (768s)
+  gen 20: R2_runback_G2 J 0.023 viol 0.000  (985s)
+  gen 25: R2_runback_G2 J 0.023 viol 0.000  (1221s)
+  gen 30: R2_runback_G2 J 0.023 viol 0.000  (1450s)
+  gen 35: R2_runback_G2 J 0.023 viol 0.000  (1678s)
+  gen 40: R2_runback_G2 J 0.023 viol 0.000  (1895s)
+  gen 45: R2_runback_G2 J 0.023 viol 0.000  (2109s)
+  gen 50: R2_runback_G2 J 0.023 viol 0.000  (2325s)
+  gen 55: R2_runback_G2 J 0.023 viol 0.000  (2539s)
+  gen 59: R2_runback_G2 J 0.023 viol 0.000  (2713s)
+  R2_runback_G2      ACCEPTED: L0: fails [] -> [], bump 0.000 -> 0.000, median 0.000e+00 -> 0.000e+00 (ref 0.000e+00), in-env 1.00 (ref 1.00) | L28: fails ['bump>0.05'] -> [], bump 0.104 -> 0.049, median 0.000e+00 -> 0.000e+00 (ref 0.000e+00), in-env 1.00 (ref 1.00)
+FINAL L = 0 ms: failing 0 {}
+    with S36(a) R1d exemption: failing 0 {}; bump max (non-R1d) 0.000; R1d transfer (disclosed) {'R1d_G1': 0.0, 'R1d_G2': 0.0}
+FINAL L = 28 ms: failing 4 {'R1_line_10': ['bump>0.05'], 'R1_load_30': ['worse_than_reference'], 'R1_runback_G1': ['worse_than_reference'], 'R1d_G1': ['bump>0.05']}
+    with S36(a) R1d exemption: failing 3 {'R1_line_10': ['bump>0.05'], 'R1_load_30': ['worse_than_reference'], 'R1_runback_G1': ['worse_than_reference']}; bump max (non-R1d) 0.945; R1d transfer (disclosed) {'R1d_G1': 0.883, 'R1d_G2': 0.044}
+FINAL L = 57 ms: failing 9 {'R1_line_7': ['bump>0.05'], 'R1_line_9': ['envelope_loss x2', 'worse_than_reference', 'bump>0.05'], 'R1_line_10': ['bump>0.05'], 'R1_load_30': ['worse_than_reference'], 'R1_runback_G1': ['worse_than_reference'], 'R1d_G1': ['bump>0.05'], 'R1d_G2': ['bump>0.05'], 'R2_line': ['rail>5%', 'bump>0.05'], 'R2_runback_G2': ['bump>0.05']}
+    with S36(a) R1d exemption: failing 7 {'R1_line_7': ['bump>0.05'], 'R1_line_9': ['envelope_loss x2', 'worse_than_reference', 'bump>0.05'], 'R1_line_10': ['bump>0.05'], 'R1_load_30': ['worse_than_reference'], 'R1_runback_G1': ['worse_than_reference'], 'R2_line': ['rail>5%', 'bump>0.05'], 'R2_runback_G2': ['bump>0.05']}; bump max (non-R1d) 0.972; R1d transfer (disclosed) {'R1d_G1': 0.902, 'R1d_G2': 0.831}
+done (2816s)

@@ -1,0 +1,13 @@
+L =   0 ms: failing 0/62 {}; bump max 0.000 (20s)
+L =  28 ms: failing 3/62 {'bump>0.05': 3}; bump max 0.945 (21s)
+    R1_line_10         ['bump>0.05']  bump 0.945  med 1.427e-03 vs ref 1.746e-03  rail 0.001
+    R1d_G1             ['bump>0.05']  bump 0.883  med 3.494e-03 vs ref 5.150e-03  rail 0.015
+    R2_runback_G2      ['bump>0.05']  bump 0.104  med 0.000e+00 vs ref 0.000e+00  rail 0.000
+L =  57 ms: failing 7/62 {'bump>0.05': 7, 'envelope_loss': 1, 'worse_than_reference': 1, 'rail>5%': 1}; bump max 0.972 (22s)
+    R1_line_7          ['bump>0.05']  bump 0.693  med 8.218e-04 vs ref 1.059e-03  rail 0.000
+    R1_line_9          ['envelope_loss x2', 'worse_than_reference', 'bump>0.05']  bump 0.515  med 2.958e-03 vs ref 1.543e-03  rail 0.000
+    R1_line_10         ['bump>0.05']  bump 0.972  med 1.578e-03 vs ref 1.746e-03  rail 0.001
+    R1d_G1             ['bump>0.05']  bump 0.902  med 4.830e-03 vs ref 5.150e-03  rail 0.014
+    R1d_G2             ['bump>0.05']  bump 0.831  med 5.161e-04 vs ref 7.956e-04  rail 0.000
+    R2_line            ['rail>5%', 'bump>0.05']  bump 0.575  med 0.000e+00 vs ref 0.000e+00  rail 0.588
+    R2_runback_G2      ['bump>0.05']  bump 0.208  med 0.000e+00 vs ref 0.000e+00  rail 0.000

@@ -151,7 +151,7 @@ if __name__ == '__main__':
         log(f'FINAL L = {Lk} ms: failing {len(ff)} {ff}; bump max {max(v[n]["bump_max"] for n in names):.3f}')
     r = json.load(open('library_v21.json'))
     for n in names:
-        r['entries'][n]['gains'] = np.round(lib[n], 6).tolist()
+        r['entries'][n]['gains'] = lib[n].tolist()                      # full precision (6-dp rounding moved the g18 fallbacks off g18)
         r['entries'][n]['verify_delayed'] = {Lk: final[Lk][n] for Lk in final}
         if n in report:
             r['entries'][n]['repair_delayed'] = dict(accepted=report[n]['accepted'])

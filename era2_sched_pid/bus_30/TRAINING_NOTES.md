@@ -246,3 +246,52 @@ V-CLS only (V-REG failed in v1.0), with the same splits, profiles, latch protoco
    - accept and disclose.
 2. **R1_line_10 and R2_runback_G2.** Allow a wider or longer repair (σ0, generations) for these two, or disclose.
 3. **The 57 ms diagnostics** (R1_line_9 envelope loss, R2_line rail 0.59) are outside the acceptance states. They matter only if a 57 ms variant is ever deployed.
+
+## §36(b) Focused repair of R2_runback_G2 → library v2.3; correction to §35 (2026-11-23)
+
+**Focused repair** (`repair_focused.py`)
+- Same objective and constraints as §35: hard terms at L = 0 and 28 ms, no slew, no softer gains. Starts from the v2.2 entry.
+- Tuned on **all 254 cases** of the entry. §35's stride subset (51 cases) missed the 1 % that still bumped.
+- Budget: σ0 0.6, population 24, 60 generations; 47 min.
+- **Accepted.** Own bump at 28 ms 0.104 → 0.049; at L = 0 it stays 0. t_s stays 0 (ref 0) and in-envelope stays 100 %.
+- The CMA objective reported viol 0 from generation 0 even on all cases, so the starting entry's 0.104 case was in the grid but not the tuning set. The search moved off it within the hard-term plateau.
+
+**Correction: 6-dp gain rounding in the library writer**
+- `repair_delayed.py` wrote gains with `np.round(·, 6)`. That moved the two generalist-fallback entries (R1_load_30, R1_runback_G1) 4.8e-7 off g18.
+- With gains no longer identical, the scheduler registers a switch at t1. The switch re-preloads the integrator (I′ = P_prev − Kp·e − …), which unwinds a rail-clamped integrator, so the dynamics change.
+- §35's verification used the in-memory gains, so its library tables are correct. **Its cls_learned_A table was run on the rounded JSON and is not.**
+- Fixed:
+  - writers now store full precision;
+  - R1_load_30 and R1_runback_G1 are restored to the exact v2.1 values in `library_v22.json` and `library_v23.json`;
+  - both libraries were re-verified from JSON (`reverify_v22.json`, `reverify_v23.json`);
+  - `ident_eval_v22check_library_v22.*` is replaced by `ident_eval_check_v22.*`.
+- The corrected v2.2 verification reproduces §35 exactly: L = 0 → 0 fails; 28 ms → R1_line_10, R1d_G1, R2_runback_G2.
+
+**cls_learned_A on v2.2, corrected vs as reported in §35** (runback n = 364, load n = 299)
+
+| Class | Median peak | # worse than gen | Bump max (frac > 0.05) |
+|---|---|---|---|
+| Gen runback | 0.000437 (reported 0.000434) | **147** (reported 1; v2.1 203) | 0.158 (0.5 %) — unchanged |
+| Load | 0.000673 | **13** (reported 5; v2.1 13) | 0 |
+| Line / α = 1 G1 / α = 1 G2 | unchanged | unchanged | unchanged |
+
+- Bars are unchanged (bar 1 pass on runback and load, scheduled = delayed oracle).
+- **The "203 → 1" in §35, cited in §36(1), is wrong. Corrected: 203 → 147.**
+- Side observation: an identical-gains re-preload at the decision time acts as an integrator reset and lowers runback peaks. It is not used; it would be a mechanism change.
+
+**Library v2.3** (from JSON; `reverify_v23.json`)
+
+| L | Failing | With the §36(a) R1d exemption and the §36(b) R1_line_10 disclosure |
+|---|---|---|
+| 0 | 0 (bump max 0.000) | 0 |
+| **28 ms** | 2: R1_line_10 bump 0.945, R1d_G1 0.883 | **0** |
+| 57 ms (diag.) | 7: R1_line_7, R1_line_9, R1_line_10, R1d_G1, R1d_G2, R2_line, R2_runback_G2 (0.101) | — |
+
+- R1d disclosed transfer at 28 ms: R1d_G1 0.883, R1d_G2 0.044.
+
+**cls_learned_A on v2.3** (test split, true dynamics)
+- 100 % ID, bar 2 100 %, scheduled = delayed oracle in every class.
+- **Gen runback:** median 0.000437 → 0.000453 (+3.7 %, the cost of the R2_runback_G2 repair). Still bar 1 pass; 148 worse than gen.
+- **Gen runback bump:** 0.158 → **0.051**, 0.3 % of cases above 0.05. The grid max is 0.049, so the test split has one case 0.001 over.
+- **Other classes:** load, line, α = 1 G1 and α = 1 G2 unchanged from v2.2.
+- **cls_64_A:** gen runback 0.000438 → 0.000495, bump 0.164 → 0.070; other classes unchanged.

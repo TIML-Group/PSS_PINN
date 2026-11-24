@@ -1,0 +1,4 @@
+| Model | L [ms] | ID acc | all bars | gen runback: sched / oracle / gen median peak, in-env | load: sched / oracle / gen median peak, in-env | line: sched / oracle / gen median peak, in-env | alpha1 G1: sched / oracle / gen median peak, in-env | alpha1 G2: sched / oracle / gen median peak, in-env |
+|---|---|---|---|---|---|---|---|---|
+| cls_64_A | 64 | 1.0000 | no | 0.00050 / 0.00043 / 0.00065, 1.00 | 0.00075 / 0.00060 / 0.00085, 1.00 | 0.00006 / 0.00006 / 0.00006, 1.00 | 0.00496 / 0.00099 / 0.00515, 1.00 | 0.00056 / 0.00004 / 0.00080, 1.00 |
+| cls_learned_A | 28 | 1.0000 | no | 0.00045 / 0.00043 / 0.00065, 1.00 | 0.00067 / 0.00060 / 0.00085, 1.00 | 0.00006 / 0.00006 / 0.00006, 1.00 | 0.00349 / 0.00099 / 0.00515, 1.00 | 0.00031 / 0.00004 / 0.00080, 1.00 |
