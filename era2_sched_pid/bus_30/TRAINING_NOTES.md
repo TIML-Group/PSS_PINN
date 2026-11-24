@@ -295,3 +295,30 @@ V-CLS only (V-REG failed in v1.0), with the same splits, profiles, latch protoco
 - **Gen runback bump:** 0.158 → **0.051**, 0.3 % of cases above 0.05. The grid max is 0.049, so the test split has one case 0.001 over.
 - **Other classes:** load, line, α = 1 G1 and α = 1 G2 unchanged from v2.2.
 - **cls_64_A:** gen runback 0.000438 → 0.000495, bump 0.164 → 0.070; other classes unchanged.
+
+## Needy-line re-count on the test split (2026-11-24, §24/§38 chain item)
+
+`needy_recount.py`. Needy means the §18 generalist (g18, no switching) leaves the envelope: excluded peak > 0.005 pu. Counts come from dataset v2 meta; re-simulating the generalist reproduces meta exactly (max |diff| 0). Oracle and cls_learned_A (28 ms) are on library v2.3.
+
+| Line faults | n | Needy | Near miss (0.9–1.0 × limit) |
+|---|---|---|---|
+| **test** | 337 | **0** | 11 |
+| val | 326 | 4 | 5 |
+| train | 2605 | 4 | 41 |
+| all | 3268 | 8 | 57 |
+
+Test context, needy counts in the other classes:
+
+| Test class | n | Needy |
+|---|---|---|
+| Gen runback | 364 | 0 |
+| Load | 299 | 0 |
+| α = 1 G1 | 100 | 100 |
+| α = 1 G2 | 100 | 0 |
+
+- **Every needy and near-miss line case is line 1.**
+  - The 8 needy cases are long faults, 2.65–2.98 s, with generalist peaks 0.00504–0.00527.
+  - The near misses run 1.16–2.58 s; the test-split maximum is 0.004988.
+- **The oracle and cls_learned_A rescue all of them** (oracle 0.00078, cls_learned_A 0.00198, identification correct in every case). The peak falls before the duration matters, so it is the same for every line-1 case. Non-test cases are in-sample for the model.
+- **Test-split line in-envelope is 100 %** for generalist, oracle and cls_learned_A alike. The line class has no rescue-rate story on the test split; it is a deviation story, matching §18's retirement of the quota.
+- The 8 needy line cases sit in train/val only, a consequence of the seeded split. The only needy test population is α = 1 G1 (100/100), rescued 100 % (bar 2).
