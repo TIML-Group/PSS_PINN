@@ -1,0 +1,673 @@
+{
+ "ckpt": "ident_ckpt_trunk/cls_learned_A.pt",
+ "lib": "library_v23.json",
+ "trunk": "A",
+ "variant": "cls",
+ "profile": "learned",
+ "params": 143613,
+ "L_ms": 27.7,
+ "reps": 100,
+ "gpu": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+ "torch": "2.12.0.dev20260408+cu128",
+ "note_static": "L/mask/pos/mean-mask-sum precomputed once OFF the timed path (L is a frozen inference parameter; a retrain must refresh them)",
+ "note_launch": "torch.profiler on this ROCm build exposes no launch-API events; launch_total=None, aten_ops_kernel (ops issuing >=1 GPU kernel) is the recorded fallback",
+ "note_maxdiff": "gpu_fused/cpu_pid outputs vs gpu_base; the featurize reassociation leaves up to ~5e-4 in normalised features and ~6e-3 in logits, argmax identical on every draw",
+ "gates_failed": [],
+ "maxdiff_tol": 0.0001,
+ "variants": {
+  "B1": {
+   "gather_assert_exact": true,
+   "burn": 6000,
+   "gpu_base": {
+    "eager_mean_ms": 1.4167139999335632,
+    "eager_median_ms": 1.3815499987686053,
+    "eager_p90_ms": 1.6400600055931138,
+    "stage_gather_ms": 0.037949997931718826,
+    "stage_featurize_ms": 0.1869000116130337,
+    "stage_mlp_ms": 0.647299995762296,
+    "stage_lookup_ms": 0.026300011086277664,
+    "stage_pid_ms": 0.3091500111622736,
+    "graph_mean_ms": 0.1301579998107627,
+    "graph_median_ms": 0.13550001312978566,
+    "graph_p90_ms": 0.15084001061040908,
+    "graph_vs_eager_maxdiff": 0.0
+   },
+   "gpu_fused": {
+    "eager_mean_ms": 0.8510249998653308,
+    "eager_median_ms": 0.8421499951509759,
+    "eager_p90_ms": 0.9470899880398065,
+    "maxdiff_vs_base": 2.1827872842550278e-09,
+    "maxdiff_detail_vs_base": {
+     "out_Ps": 2.1827872842550278e-09,
+     "out_I": 7.275957614183426e-12,
+     "out_g1": 0.0,
+     "out_g2": 0.0
+    },
+    "stage_gather_ms": 0.05195000267121941,
+    "stage_featurize_ms": 0.08135000825859606,
+    "stage_mlp_ms": 0.37054999847896397,
+    "stage_lookup_ms": 0.01810002140700817,
+    "stage_pid_ms": 0.20140002015978098,
+    "graph_mean_ms": 0.09783999994397163,
+    "graph_median_ms": 0.09859999408945441,
+    "graph_p90_ms": 0.12729000591207296,
+    "graph_vs_eager_maxdiff": 0.0,
+    "graph_vs_base_maxdiff": 2.1827872842550278e-09
+   },
+   "cpu_pid": {
+    "eager_mean_ms": 0.8253119987784885,
+    "eager_median_ms": 0.8105500019155443,
+    "eager_p90_ms": 0.932710006600246,
+    "maxdiff_vs_base": 7.275957614183426e-12,
+    "maxdiff_detail_vs_base": {
+     "out_Ps": 7.275957614183426e-12,
+     "out_I": 7.275957614183426e-12,
+     "out_g1": 0.0,
+     "out_g2": 0.0
+    },
+    "arm_graph_d2h_captured": true,
+    "arm_graph_capture_error": null,
+    "arm_graph_mean_ms": 0.16959400003543124,
+    "arm_graph_median_ms": 0.12055000115651637,
+    "arm_graph_p90_ms": 0.13183001428842545,
+    "gpugraph_plus_host_mean_ms": 0.26786700036609545,
+    "gpugraph_plus_host_median_ms": 0.2617499849293381,
+    "gpugraph_plus_host_p90_ms": 0.2835999999660999,
+    "gpugraph_plus_host_maxdiff_vs_base": 7.275957614183426e-12
+   },
+   "diag_logits_maxdiff": 0.002955913543701172,
+   "diag_feat_maxdiff": 0.0004146397113800049,
+   "diag_argmax_mismatch": 0,
+   "diag_argmax_margin_min": 8.930214881896973,
+   "gpu_base_recheck": {
+    "eager_mean_ms": 1.2679159993422218,
+    "eager_median_ms": 1.2216499890200794,
+    "eager_p90_ms": 1.4098999788984659,
+    "graph_median_ms": 0.13639999087899923,
+    "graph_p90_ms": 0.16110000433400273
+   },
+   "launches": {
+    "gpu_base": {
+     "launch_keys": {
+      "cudaLaunchKernel": 81,
+      "cuLaunchKernel": 5,
+      "_ZN2at6native29vectorized_elementwise_kernelILi4EZZZNS0_49_GLOBAL__N__a62a4dcd_16_TensorCompare_cu_71e06f4e19launch_clamp_scalarERNS_18TensorIteratorBaseEN3c106ScalarES6_NS0_6detail11ClampLimitsEENKUlvE_clEvENKUlvE5_clEvEUlfE_St5arrayIPcLy2EEEEviT0_T1_": 1
+     },
+     "launch_total": 87,
+     "aten_ops_total": 390,
+     "aten_ops_kernel": 285,
+     "op_counts": [
+      [
+       "cudaLaunchKernel",
+       81
+      ],
+      [
+       "aten::as_strided",
+       37
+      ],
+      [
+       "aten::view",
+       23
+      ],
+      [
+       "aten::mul",
+       13
+      ],
+      [
+       "aten::reshape",
+       12
+      ],
+      [
+       "aten::sub",
+       12
+      ],
+      [
+       "_ZN2at6native24index_elementwise_kernelILi128ELi4EZNS0_16gpu_index_kernelIZNS0_17index_kernel_implINS0_10OpaqueTypeILi4EEEEEvRNS_18TensorIteratorBaseEN3c108ArrayRefIxEESA_EUlPcPKcxE_EEvS7_SA_SA_RKT_bEUliE_EEvxT1_",
+       10
+      ],
+      [
+       "aten::index",
+       10
+      ],
+      [
+       "aten::expand",
+       8
+      ],
+      [
+       "_ZN2at6native29vectorized_elementwise_kernelILi4ENS0_15CUDAFunctor_addIfEESt5arrayIPcLy3EEEEviT0_T1_",
+       7
+      ],
+      [
+       "aten::linear",
+       7
+      ],
+      [
+       "aten::t",
+       7
+      ],
+      [
+       "aten::transpose",
+       7
+      ],
+      [
+       "Memcpy DtoD (Device -> Device)",
+       6
+      ],
+      [
+       "_ZN2at6native18elementwise_kernelILi128ELi2EZNS0_22gpu_kernel_impl_nocastINS0_13BinaryFunctorIfffNS0_15binary_internal10MulFunctorIfEEEEEEvRNS_18TensorIteratorBaseERKT_EUliE_EEviT1_",
+       6
+      ],
+      [
+       "_ZN8cublasLt19splitKreduce_kernelILi32ELi16EiffffLb0EfffLb1ELb0ELb0EEEvNS_18cublasSplitKParamsIT4_EEPKT2_PKT8_PT7_PT3_PKS2_SF_PKT9_S6_PSG_PvxPS2_PiSL_SL_SF_SF_SF_SF_SF_",
+       6
+      ],
+      [
+       "aten::addmm",
+       6
+      ],
+      [
+       "cudaMemcpyAsync",
+       6
+      ]
+     ],
+     "error": null
+    },
+    "gpu_fused": {
+     "launch_keys": {
+      "cudaLaunchKernel": 49,
+      "cuLaunchKernel": 5
+     },
+     "launch_total": 54,
+     "aten_ops_total": 268,
+     "aten_ops_kernel": 186,
+     "op_counts": [
+      [
+       "cudaLaunchKernel",
+       49
+      ],
+      [
+       "aten::as_strided",
+       28
+      ],
+      [
+       "aten::view",
+       15
+      ],
+      [
+       "aten::expand",
+       9
+      ],
+      [
+       "_ZN8cublasLt19splitKreduce_kernelILi32ELi16EiffffLb0EfffLb1ELb0ELb0EEEvNS_18cublasSplitKParamsIT4_EEPKT2_PKT8_PT7_PT3_PKS2_SF_PKT9_S6_PSG_PvxPS2_PiSL_SL_SF_SF_SF_SF_SF_",
+       6
+      ],
+      [
+       "aten::linear",
+       6
+      ],
+      [
+       "aten::t",
+       6
+      ],
+      [
+       "aten::transpose",
+       6
+      ],
+      [
+       "Memcpy DtoD (Device -> Device)",
+       5
+      ],
+      [
+       "_ZN2at6native29vectorized_elementwise_kernelILi4ENS0_15CUDAFunctor_addIfEESt5arrayIPcLy3EEEEviT0_T1_",
+       5
+      ],
+      [
+       "_ZN7cutlass7Kernel2I41cutlass_80_simt_sgemm_64x64_8x5_tn_align1EEvNT_6ParamsE",
+       5
+      ],
+      [
+       "aten::addmm",
+       5
+      ],
+      [
+       "aten::copy_",
+       5
+      ],
+      [
+       "cuLaunchKernel",
+       5
+      ],
+      [
+       "cudaDeviceGetAttribute",
+       5
+      ],
+      [
+       "cudaMemcpyAsync",
+       5
+      ],
+      [
+       "_ZN2at6native18elementwise_kernelILi128ELi2EZNS0_22gpu_kernel_impl_nocastIZZZNS0_23direct_copy_kernel_cudaERNS_18TensorIteratorBaseEENKUlvE1_clEvENKUlvE5_clEvEUlfE_EEvS4_RKT_EUliE_EEviT1_",
+       4
+      ],
+      [
+       "_ZN2at6native29vectorized_elementwise_kernelILi4EZZZNS0_16tanh_kernel_cudaERNS_18TensorIteratorBaseEENKUlvE0_clEvENKUlvE0_clEvEUlfE_St5arrayIPcLy2EEEEviT0_T1_",
+       4
+      ]
+     ],
+     "error": null
+    },
+    "cpu_pid_gpu_arm": {
+     "launch_keys": {
+      "cudaLaunchKernel": 35,
+      "cuLaunchKernel": 5
+     },
+     "launch_total": 40,
+     "aten_ops_total": 213,
+     "aten_ops_kernel": 135,
+     "op_counts": [
+      [
+       "cudaLaunchKernel",
+       35
+      ],
+      [
+       "aten::as_strided",
+       23
+      ],
+      [
+       "aten::view",
+       17
+      ],
+      [
+       "aten::expand",
+       9
+      ],
+      [
+       "aten::reshape",
+       7
+      ],
+      [
+       "_ZN8cublasLt19splitKreduce_kernelILi32ELi16EiffffLb0EfffLb1ELb0ELb0EEEvNS_18cublasSplitKParamsIT4_EEPKT2_PKT8_PT7_PT3_PKS2_SF_PKT9_S6_PSG_PvxPS2_PiSL_SL_SF_SF_SF_SF_SF_",
+       6
+      ],
+      [
+       "aten::linear",
+       6
+      ],
+      [
+       "aten::t",
+       6
+      ],
+      [
+       "aten::transpose",
+       6
+      ],
+      [
+       "_ZN7cutlass7Kernel2I41cutlass_80_simt_sgemm_64x64_8x5_tn_align1EEvNT_6ParamsE",
+       5
+      ],
+      [
+       "aten::addmm",
+       5
+      ],
+      [
+       "cuLaunchKernel",
+       5
+      ],
+      [
+       "cudaDeviceGetAttribute",
+       5
+      ],
+      [
+       "_ZN2at6native18elementwise_kernelILi128ELi2EZNS0_22gpu_kernel_impl_nocastIZZZNS0_23direct_copy_kernel_cudaERNS_18TensorIteratorBaseEENKUlvE1_clEvENKUlvE5_clEvEUlfE_EEvS4_RKT_EUliE_EEviT1_",
+       4
+      ],
+      [
+       "_ZN2at6native29vectorized_elementwise_kernelILi4EZZZNS0_16tanh_kernel_cudaERNS_18TensorIteratorBaseEENKUlvE0_clEvENKUlvE0_clEvEUlfE_St5arrayIPcLy2EEEEviT0_T1_",
+       4
+      ],
+      [
+       "aten::empty",
+       4
+      ],
+      [
+       "aten::tanh",
+       4
+      ],
+      [
+       "aten::cat",
+       3
+      ]
+     ],
+     "error": null
+    }
+   }
+  },
+  "B256": {
+   "gather_assert_exact": true,
+   "burn": 6000,
+   "gpu_base": {
+    "eager_mean_ms": 2.9495629997109063,
+    "eager_median_ms": 2.9167500033508986,
+    "eager_p90_ms": 3.1330399913713336,
+    "stage_gather_ms": 0.10299999848939478,
+    "stage_featurize_ms": 0.2909499889938161,
+    "stage_mlp_ms": 2.289199997903779,
+    "stage_lookup_ms": 0.03819999983534217,
+    "stage_pid_ms": 0.335300006554462,
+    "graph_mean_ms": 2.3914029999286868,
+    "graph_median_ms": 2.427300001727417,
+    "graph_p90_ms": 2.5125600077444687,
+    "graph_vs_eager_maxdiff": 0.0
+   },
+   "gpu_fused": {
+    "eager_mean_ms": 2.688916998449713,
+    "eager_median_ms": 2.6551500050118193,
+    "eager_p90_ms": 2.889610020793043,
+    "maxdiff_vs_base": 4.76837158203125e-07,
+    "maxdiff_detail_vs_base": {
+     "out_Ps": 4.76837158203125e-07,
+     "out_I": 2.384185791015625e-07,
+     "out_g1": 0.0,
+     "out_g2": 0.0
+    },
+    "stage_gather_ms": 0.09904999751597643,
+    "stage_featurize_ms": 0.16354999388568103,
+    "stage_mlp_ms": 2.137200004654005,
+    "stage_lookup_ms": 0.027299989596940577,
+    "stage_pid_ms": 0.21994998678565025,
+    "graph_mean_ms": 2.3691400000825524,
+    "graph_median_ms": 2.449399995384738,
+    "graph_p90_ms": 2.7761599922087044,
+    "graph_vs_eager_maxdiff": 0.0,
+    "graph_vs_base_maxdiff": 4.76837158203125e-07
+   },
+   "cpu_pid": {
+    "eager_mean_ms": 2.614758998970501,
+    "eager_median_ms": 2.586300004622899,
+    "eager_p90_ms": 2.76950997649692,
+    "maxdiff_vs_base": 4.76837158203125e-07,
+    "maxdiff_detail_vs_base": {
+     "out_Ps": 4.76837158203125e-07,
+     "out_I": 2.384185791015625e-07,
+     "out_g1": 0.0,
+     "out_g2": 0.0
+    },
+    "arm_graph_d2h_captured": true,
+    "arm_graph_capture_error": null,
+    "arm_graph_mean_ms": 2.4182620001374744,
+    "arm_graph_median_ms": 2.3996499949134886,
+    "arm_graph_p90_ms": 2.487149985972792,
+    "gpugraph_plus_host_mean_ms": 2.549576000601519,
+    "gpugraph_plus_host_median_ms": 2.5206500140484422,
+    "gpugraph_plus_host_p90_ms": 2.677329996367917,
+    "gpugraph_plus_host_maxdiff_vs_base": 4.76837158203125e-07
+   },
+   "diag_logits_maxdiff": 0.005654335021972656,
+   "diag_feat_maxdiff": 0.0005162656307220459,
+   "diag_argmax_mismatch": 0,
+   "diag_argmax_margin_min": 2.77520751953125,
+   "gpu_base_recheck": {
+    "eager_mean_ms": 3.0474109991337173,
+    "eager_median_ms": 2.9886499978601933,
+    "eager_p90_ms": 3.3008200232870877,
+    "graph_median_ms": 2.4475499958498403,
+    "graph_p90_ms": 2.494300014222972
+   },
+   "launches": {
+    "gpu_base": {
+     "launch_keys": {
+      "cudaLaunchKernel": 82,
+      "cuLaunchKernel": 1,
+      "_ZN2at6native29vectorized_elementwise_kernelILi4EZZZNS0_49_GLOBAL__N__a62a4dcd_16_TensorCompare_cu_71e06f4e19launch_clamp_scalarERNS_18TensorIteratorBaseEN3c106ScalarES6_NS0_6detail11ClampLimitsEENKUlvE_clEvENKUlvE5_clEvEUlfE_St5arrayIPcLy2EEEEviT0_T1_": 1
+     },
+     "launch_total": 84,
+     "aten_ops_total": 374,
+     "aten_ops_kernel": 269,
+     "op_counts": [
+      [
+       "cudaLaunchKernel",
+       82
+      ],
+      [
+       "aten::as_strided",
+       37
+      ],
+      [
+       "aten::view",
+       23
+      ],
+      [
+       "aten::mul",
+       13
+      ],
+      [
+       "aten::reshape",
+       12
+      ],
+      [
+       "aten::sub",
+       12
+      ],
+      [
+       "_ZN2at6native24index_elementwise_kernelILi128ELi4EZNS0_16gpu_index_kernelIZNS0_17index_kernel_implINS0_10OpaqueTypeILi4EEEEEvRNS_18TensorIteratorBaseEN3c108ArrayRefIxEESA_EUlPcPKcxE_EEvS7_SA_SA_RKT_bEUliE_EEvxT1_",
+       10
+      ],
+      [
+       "aten::index",
+       10
+      ],
+      [
+       "aten::expand",
+       8
+      ],
+      [
+       "_ZN2at6native29vectorized_elementwise_kernelILi4ENS0_15CUDAFunctor_addIfEESt5arrayIPcLy3EEEEviT0_T1_",
+       7
+      ],
+      [
+       "aten::linear",
+       7
+      ],
+      [
+       "aten::t",
+       7
+      ],
+      [
+       "aten::transpose",
+       7
+      ],
+      [
+       "_ZN2at6native18elementwise_kernelILi128ELi2EZNS0_22gpu_kernel_impl_nocastINS0_13BinaryFunctorIfffNS0_15binary_internal10MulFunctorIfEEEEEEvRNS_18TensorIteratorBaseERKT_EUliE_EEviT1_",
+       6
+      ],
+      [
+       "_ZN2at6native18elementwise_kernelILi128ELi2EZNS0_22gpu_kernel_impl_nocastIZZZNS0_23direct_copy_kernel_cudaERNS_18TensorIteratorBaseEENKUlvE1_clEvENKUlvE5_clEvEUlfE_EEvS4_RKT_EUliE_EEviT1_",
+       6
+      ],
+      [
+       "aten::addmm",
+       6
+      ],
+      [
+       "_Z20magma_sgemmEx_kernelIfffLb1ELb0ELi6ELi4ELi6ELi3ELi4EEviii6TensoriS0_iS0_iS0_iiiPKT_S3_S1_S1_i18cublasLtEpilogue_tiPKvx",
+       5
+      ],
+      [
+       "_ZN2at6native18elementwise_kernelILi128ELi2EZNS0_22gpu_kernel_impl_nocastINS0_15CUDAFunctor_addIfEEEEvRNS_18TensorIteratorBaseERKT_EUliE_EEviT1_",
+       5
+      ]
+     ],
+     "error": null
+    },
+    "gpu_fused": {
+     "launch_keys": {
+      "cudaLaunchKernel": 51,
+      "cuLaunchKernel": 1
+     },
+     "launch_total": 52,
+     "aten_ops_total": 258,
+     "aten_ops_kernel": 171,
+     "op_counts": [
+      [
+       "cudaLaunchKernel",
+       51
+      ],
+      [
+       "aten::as_strided",
+       31
+      ],
+      [
+       "aten::view",
+       16
+      ],
+      [
+       "aten::expand",
+       10
+      ],
+      [
+       "_ZN2at6native18elementwise_kernelILi128ELi2EZNS0_22gpu_kernel_impl_nocastIZZZNS0_23direct_copy_kernel_cudaERNS_18TensorIteratorBaseEENKUlvE1_clEvENKUlvE5_clEvEUlfE_EEvS4_RKT_EUliE_EEviT1_",
+       7
+      ],
+      [
+       "aten::linear",
+       6
+      ],
+      [
+       "aten::t",
+       6
+      ],
+      [
+       "aten::transpose",
+       6
+      ],
+      [
+       "_Z20magma_sgemmEx_kernelIfffLb1ELb0ELi6ELi4ELi6ELi3ELi4EEviii6TensoriS0_iS0_iS0_iiiPKT_S3_S1_S1_i18cublasLtEpilogue_tiPKvx",
+       5
+      ],
+      [
+       "aten::addmm",
+       5
+      ],
+      [
+       "aten::copy_",
+       5
+      ],
+      [
+       "_ZN2at6native18elementwise_kernelILi128ELi2EZNS0_22gpu_kernel_impl_nocastINS0_13BinaryFunctorIfffNS0_15binary_internal10MulFunctorIfEEEEEEvRNS_18TensorIteratorBaseERKT_EUliE_EEviT1_",
+       4
+      ],
+      [
+       "_ZN2at6native29vectorized_elementwise_kernelILi4ENS0_15CUDAFunctor_addIfEESt5arrayIPcLy3EEEEviT0_T1_",
+       4
+      ],
+      [
+       "_ZN2at6native29vectorized_elementwise_kernelILi4EZZZNS0_16tanh_kernel_cudaERNS_18TensorIteratorBaseEENKUlvE0_clEvENKUlvE0_clEvEUlfE_St5arrayIPcLy2EEEEviT0_T1_",
+       4
+      ],
+      [
+       "aten::empty",
+       4
+      ],
+      [
+       "aten::mul_",
+       4
+      ],
+      [
+       "aten::sub",
+       4
+      ],
+      [
+       "aten::tanh",
+       4
+      ]
+     ],
+     "error": null
+    },
+    "cpu_pid_gpu_arm": {
+     "launch_keys": {
+      "cudaLaunchKernel": 35,
+      "cuLaunchKernel": 1
+     },
+     "launch_total": 36,
+     "aten_ops_total": 203,
+     "aten_ops_kernel": 120,
+     "op_counts": [
+      [
+       "cudaLaunchKernel",
+       35
+      ],
+      [
+       "aten::as_strided",
+       26
+      ],
+      [
+       "aten::view",
+       18
+      ],
+      [
+       "aten::expand",
+       10
+      ],
+      [
+       "aten::reshape",
+       7
+      ],
+      [
+       "aten::linear",
+       6
+      ],
+      [
+       "aten::t",
+       6
+      ],
+      [
+       "aten::transpose",
+       6
+      ],
+      [
+       "_Z20magma_sgemmEx_kernelIfffLb1ELb0ELi6ELi4ELi6ELi3ELi4EEviii6TensoriS0_iS0_iS0_iiiPKT_S3_S1_S1_i18cublasLtEpilogue_tiPKvx",
+       5
+      ],
+      [
+       "_ZN2at6native18elementwise_kernelILi128ELi2EZNS0_22gpu_kernel_impl_nocastIZZZNS0_23direct_copy_kernel_cudaERNS_18TensorIteratorBaseEENKUlvE1_clEvENKUlvE5_clEvEUlfE_EEvS4_RKT_EUliE_EEviT1_",
+       5
+      ],
+      [
+       "aten::addmm",
+       5
+      ],
+      [
+       "_ZN2at6native29vectorized_elementwise_kernelILi4EZZZNS0_16tanh_kernel_cudaERNS_18TensorIteratorBaseEENKUlvE0_clEvENKUlvE0_clEvEUlfE_St5arrayIPcLy2EEEEviT0_T1_",
+       4
+      ],
+      [
+       "aten::empty",
+       4
+      ],
+      [
+       "aten::tanh",
+       4
+      ],
+      [
+       "_ZN2at6native18elementwise_kernelILi128ELi2EZNS0_22gpu_kernel_impl_nocastINS0_13BinaryFunctorIfffNS0_15binary_internal10MulFunctorIfEEEEEEvRNS_18TensorIteratorBaseERKT_EUliE_EEviT1_",
+       3
+      ],
+      [
+       "aten::cat",
+       3
+      ],
+      [
+       "aten::gather",
+       3
+      ],
+      [
+       "aten::index_select",
+       3
+      ]
+     ],
+     "error": null
+    }
+   }
+  }
+ }
+}

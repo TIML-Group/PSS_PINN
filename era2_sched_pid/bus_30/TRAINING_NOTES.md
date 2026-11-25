@@ -322,3 +322,54 @@ Test context, needy counts in the other classes:
 - **The oracle and cls_learned_A rescue all of them** (oracle 0.00078, cls_learned_A 0.00198, identification correct in every case). The peak falls before the duration matters, so it is the same for every line-1 case. Non-test cases are in-sample for the model.
 - **Test-split line in-envelope is 100 %** for generalist, oracle and cls_learned_A alike. The line class has no rescue-rate story on the test split; it is a deviation story, matching §18's retirement of the quota.
 - The 8 needy line cases sit in train/val only, a consequence of the seeded split. The only needy test population is α = 1 G1 (100/100), rescued 100 % (bar 2).
+
+## §40 ask: 5070 Ti re-run of the final controller (2026-11-24)
+
+**Machine and protocol**
+- RTX 5070 Ti Laptop on **AC power**. A first attempt on battery was throttled (eager 4.05 ms, p90 6.95 ms) and is discarded.
+- Same scripts as Ashhar's runs: `profile_latency_e2e_v23_A.py` and `profile_latency_e2e_opt.py --burn 6000`. cls_learned_A on library v2.3, reps 100.
+
+**1. Base A config** (`profile_latency_e2e_A.json`)
+
+| Batch | Eager mean / median / p90 [ms] | Graph mean / median / p90 [ms] | max\|diff\| |
+|---|---|---|---|
+| 1 | 1.296 / 1.250 / 1.475 | **0.141 / 0.134 / 0.156** | 0 |
+| 256 | 2.609 / 2.573 / 2.792 | 3.252 / 2.676 / 3.542 | 0 |
+
+- Batch-1 stages: gather 0.055, featurize 0.174, mlp 0.552, lookup 0.026, pid_update 0.243.
+- At batch 256 the A trunk's per-step pooling MLP dominates (mlp 2.09 ms), and graph shows no gain over eager.
+
+**2. Fused probe, warmed** (`profile_latency_e2e_opt_5070.json` / `.log`; 6000 burn-in decisions per batch)
+
+| Batch 1 | Eager mean / median / p90 [ms] | Graph mean / median / p90 [ms] | max\|diff\| | CUDA launches |
+|---|---|---|---|---|
+| gpu_base | 1.417 / 1.382 / 1.640 | 0.130 / 0.136 / 0.151 | 0 | 87 |
+| **gpu_fused** | **0.851 / 0.842 / 0.947** | **0.098 / 0.099 / 0.127** | 2.2e-9 | **54** |
+| cpu_pid (discarded) | 0.825 / 0.811 / 0.933 | 0.268 / 0.262 / 0.284 (graph + host) | 7.3e-12 | 40 (GPU arm) |
+
+| Batch 256 | Eager mean / median / p90 [ms] | Graph mean / median / p90 [ms] | max\|diff\| | CUDA launches |
+|---|---|---|---|---|
+| gpu_base | 2.950 / 2.917 / 3.133 | 2.391 / 2.427 / 2.513 | 0 | 84 |
+| gpu_fused | 2.689 / 2.655 / 2.890 | 2.369 / 2.449 / 2.776 | 4.8e-7 | 52 |
+| cpu_pid | 2.615 / 2.586 / 2.770 | 2.550 / 2.521 / 2.677 | 4.8e-7 | 36 |
+
+- **Numerics:**
+  - Batch 1: feature maxdiff 4.2e-4, logits 3.0e-3, 0 argmax mismatches, min top1–top2 margin 8.93.
+  - Batch 256: logits 5.7e-3, 0 mismatches, margin 2.78.
+- **Launches are measured directly on CUDA.** The profiler emits `cudaLaunchKernel` here, so no proxy is needed. Base 87 → fused 54 (−38 %); kernel-issuing aten ops 285 → 186.
+- **Fused batch-1 stages:**
+
+  | Stage | Base [ms] | Fused [ms] |
+  |---|---|---|
+  | gather | 0.038 | 0.052 |
+  | featurize | 0.187 | 0.081 |
+  | mlp | 0.647 | 0.371 |
+  | lookup | 0.026 | 0.018 |
+  | pid | 0.309 | 0.201 |
+
+- End-of-batch base recheck: batch 1 1.222 / 0.136, batch 256 2.989 / 2.448, consistent with the start.
+
+**Findings**
+- **Batch 1:** fused is −39 % eager (1.38 → 0.84 median) and −27 % graph (0.136 → 0.099 median). The final controller's decision is **~0.1 ms as one CUDA graph** on this machine, about 3.6× faster than the 6800 XT's 0.35–0.37 ms.
+- **CPU PID:** on CUDA it edges the fused path on eager at batch 1 (0.811 vs 0.842 median). As a graph plus host round trip it loses (0.262 vs 0.099). The §40 discard ruling holds: the shipped graph is fused-GPU.
+- **Batch 256:** the variants converge (graph ≈ 2.4–2.5 ms) because the A trunk's pooling MLP dominates. Launch overhead matters only at batch 1, which is the operating mode.

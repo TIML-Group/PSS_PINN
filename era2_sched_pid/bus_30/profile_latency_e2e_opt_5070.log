@@ -1,0 +1,29 @@
+burn-in: 6000 eager decisions at B=1 done, clocks assumed settled
+  _warn_once(
+
+=== batch 1 (gather exact, feat maxdiff 4.15e-04, logits maxdiff 2.96e-03, argmax mismatch 0, min top1-top2 margin 8.930) ===
+variant    eager mean     med     p90 | graph mean     med     p90 |   maxdiff     launch
+-----------------------------------------------------------------------------------------
+gpu_base        1.417   1.382   1.640 |      0.130   0.136   0.151 |   0.0e+00         87
+gpu_fused       0.851   0.842   0.947 |      0.098   0.099   0.127 |   2.2e-09         54
+cpu_pid         0.825   0.811   0.933 |      0.268   0.262   0.284 |   7.3e-12         40  (graph col = gpugraph+host, launch = GPU arm)
+  fused stages (eager med): gather 0.052 featurize 0.081 mlp 0.371 lookup 0.018 pid 0.201
+  base  stages (eager med): gather 0.038 featurize 0.187 mlp 0.647 lookup 0.026 pid 0.309
+  base recheck (end of batch): eager med 1.222  graph med 0.136
+  launch-API keys (base/fused/arm): {'cudaLaunchKernel': 81, 'cuLaunchKernel': 5, '_ZN2at6native29vectorized_elementwise_kernelILi4EZZZNS0_49_GLOBAL__N__a62a4dcd_16_TensorCompare_cu_71e06f4e19launch_clamp_scalarERNS_18TensorIteratorBaseEN3c106ScalarES6_NS0_6detail11ClampLimitsEENKUlvE_clEvENKUlvE5_clEvEUlfE_St5arrayIPcLy2EEEEviT0_T1_': 1} {'cudaLaunchKernel': 49, 'cuLaunchKernel': 5} {'cudaLaunchKernel': 35, 'cuLaunchKernel': 5}
+  aten ops per decision (total / kernel-issuing) base (390, 285) fps fused (268, 186) arm (213, 135)
+burn-in: 6000 eager decisions at B=256 done, clocks assumed settled
+
+=== batch 256 (gather exact, feat maxdiff 5.16e-04, logits maxdiff 5.65e-03, argmax mismatch 0, min top1-top2 margin 2.775) ===
+variant    eager mean     med     p90 | graph mean     med     p90 |   maxdiff     launch
+-----------------------------------------------------------------------------------------
+gpu_base        2.950   2.917   3.133 |      2.391   2.427   2.513 |   0.0e+00         84
+gpu_fused       2.689   2.655   2.890 |      2.369   2.449   2.776 |   4.8e-07         52
+cpu_pid         2.615   2.586   2.770 |      2.550   2.521   2.677 |   4.8e-07         36  (graph col = gpugraph+host, launch = GPU arm)
+  fused stages (eager med): gather 0.099 featurize 0.164 mlp 2.137 lookup 0.027 pid 0.220
+  base  stages (eager med): gather 0.103 featurize 0.291 mlp 2.289 lookup 0.038 pid 0.335
+  base recheck (end of batch): eager med 2.989  graph med 2.448
+  launch-API keys (base/fused/arm): {'cudaLaunchKernel': 82, 'cuLaunchKernel': 1, '_ZN2at6native29vectorized_elementwise_kernelILi4EZZZNS0_49_GLOBAL__N__a62a4dcd_16_TensorCompare_cu_71e06f4e19launch_clamp_scalarERNS_18TensorIteratorBaseEN3c106ScalarES6_NS0_6detail11ClampLimitsEENKUlvE_clEvENKUlvE5_clEvEUlfE_St5arrayIPcLy2EEEEviT0_T1_': 1} {'cudaLaunchKernel': 51, 'cuLaunchKernel': 1} {'cudaLaunchKernel': 35, 'cuLaunchKernel': 1}
+  aten ops per decision (total / kernel-issuing) base (374, 269) fps fused (258, 171) arm (203, 120)
+
+wrote profile_latency_e2e_opt_5070.json
