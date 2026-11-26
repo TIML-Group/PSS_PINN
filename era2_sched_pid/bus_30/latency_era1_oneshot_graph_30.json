@@ -1,0 +1,29 @@
+{
+ "system": "30-bus",
+ "head": "run_novmask",
+ "encoder": "era-1 MLP (frozen, MLP+MLP teacher)",
+ "batch": 1,
+ "n": 300,
+ "warm": 30,
+ "gpu": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+ "torch": "2.12.0.dev20260408+cu128",
+ "params": {
+  "encoder": 6927695,
+  "head": 75778
+ },
+ "eager_ms": {
+  "mean": 1.4137543307151645,
+  "median": 1.3621500111185014,
+  "p90": 1.5155000088270754,
+  "p95": 1.6291200008708986
+ },
+ "graph_ms": {
+  "mean": 0.19064266758505255,
+  "median": 0.18405000446364284,
+  "p90": 0.20551999332383275,
+  "p95": 0.2080800128169358
+ },
+ "graph_backtoback_mean_ms": 0.16239000018686056,
+ "maxdiff_gpu_feat_vs_numpy_path": 2.905726432800293e-07,
+ "maxdiff_graph_vs_eager": 0.0
+}

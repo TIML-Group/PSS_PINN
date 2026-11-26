@@ -373,3 +373,78 @@ Test context, needy counts in the other classes:
 - **Batch 1:** fused is −39 % eager (1.38 → 0.84 median) and −27 % graph (0.136 → 0.099 median). The final controller's decision is **~0.1 ms as one CUDA graph** on this machine, about 3.6× faster than the 6800 XT's 0.35–0.37 ms.
 - **CPU PID:** on CUDA it edges the fused path on eager at batch 1 (0.811 vs 0.842 median). As a graph plus host round trip it loses (0.262 vs 0.099). The §40 discard ruling holds: the shipped graph is fused-GPU.
 - **Batch 256:** the variants converge (graph ≈ 2.4–2.5 ms) because the A trunk's pooling MLP dominates. Launch overhead matters only at batch 1, which is the operating mode.
+
+## §42 (wiki) Single-machine latency comparison: era-1 one-pass ΔP head on GPU + era-2 stage split, CPU vs GPU (2026-11-25, Noor)
+
+**Scope.** All numbers are from one machine, the RTX 5070 Ti Laptop (CPU: Ryzen AI 9 HX 370, 12 threads).
+- Settings: torch 2.12.0.dev20260408+cu128, AC power, batch 1 (the operating mode).
+- Era 1 had no GPU-graph timing for its no-rollout variant. This section adds it, then splits the era-2 decision into encoder / lookup / PID on GPU and on CPU.
+
+**1. Comparison table** (30-bus, batch 1, RTX 5070 Ti)
+
+| Controller | Eager [ms] | CUDA graph [ms] | Source |
+|---|---|---|---|
+| Era 1, LSTM + RK4 cascade, dt_roll = 100 ms | 88.1* | 11.8* | §32 |
+| Era 1, MLP encoder + one-pass ΔP head (no rollout) | **1.362** (mean 1.414, p90 1.516) | **0.184** (mean 0.191, p90 0.206) | new |
+| Era 2, cls_learned_A fused + gain lookup + PID | **0.842** (mean 0.851, p90 0.947) | **0.099** (mean 0.098, p90 0.127) | §41 |
+
+\*The era-1 profiler reports means. The other two rows are medians; for an all-means table use 1.414 / 0.191 and 0.851 / 0.098.
+
+9-bus one-pass row, for reference: 1.211 / 0.105 ms (median), 1.293 / 0.105 ms (mean).
+
+**2. Era-1 one-pass measurement** (`latency_era1_oneshot_graph.py`)
+
+| | 30-bus | 9-bus |
+|---|---|---|
+| Encoder | frozen MLP encoder of the MLP+MLP teacher, `case30_fullmlp_ctrl/refined` (ep 170): 6,927,695 params | frozen MLP encoder of the MLP+MLP teacher, `receding_fullmlp/refined`: 476,442 params |
+| Head (final checkpoint) | `oneshot_dp30/run_novmask`: 75,778 params | `oneshot_dp/run_teacher_v3_novmask`: 36,355 params |
+
+- **Decision:** the raw window is already on the GPU. Then: featurise (normalised on 30-bus) → x_meas → encoder → context [z, p, α, x0] → one-pass head → ΔP. There is no RK4.
+- **Protocol (as era 2 §32):** 300 test windows (frozen seed-42 draw) after 30 warm-ups; eager is host-synced per decision; the whole decision is captured as one CUDA graph.
+- **Numerics:** graph vs eager max |diff| 0. The GPU-featurise path vs the repo's numpy path (`time30.py` / `time_neural.py`): 2.9e-7 (30-bus), 1.3e-5 (9-bus).
+- **Earlier timings** were CPU only (0.74 / 1.72 ms) plus one 9-bus GPU eager run (1.20 ms, with host featurise, H2D/D2H and the older `run_label_tapply` head). They are kept but not comparable to this table.
+- The `oneshot_dp` / `oneshot_dp30` folders are imported read-only and unchanged.
+
+**3. Era-2 stage split anchored to the table** (§41 run, RTX 5070 Ti, medians)
+
+| Stage | GPU eager [ms] | GPU CUDA graph [ms] |
+|---|---|---|
+| Encoder (gather 0.052 + featurize 0.081 + IdentNet 0.371) | 0.504 (60 %) | ≈ 0.068 (~69 %) |
+| Gain lookup | 0.018 (2 %) | ≈ 0.010 (~10 %) |
+| PID update | 0.201 (24 %) | ≈ 0.021 (~21 %) |
+| Output copies + dispatch (not stage-attributed) | 0.119 (14 %) | — |
+| **Whole decision** | **0.842** | **0.099** |
+
+- GPU eager stages are the §41 per-stage medians.
+- §41 timed the graph only as a whole. The graph split applies the per-segment shares of the split run (table 4) to 0.099 ms, hence "≈".
+
+**4. Split run, CPU vs GPU** (`latency_era2_stage_split.py`; batch 1, 300 reps after 3,000 burn-in decisions, medians [ms])
+
+The script executes the committed `profile_latency_e2e_opt.py` fused stage functions unchanged; only the device is switched.
+
+| Stage | CPU eager | GPU eager | GPU graph (per segment) |
+|---|---|---|---|
+| **Encoder** | **0.325** | **0.493** | **0.089** |
+| ↳ gather | 0.018 | 0.044 | — |
+| ↳ featurize | 0.035 | 0.062 | — |
+| ↳ IdentNet forward | 0.240 | 0.338 | — |
+| **Gain lookup** | 0.008 | 0.022 | 0.013 |
+| **PID update** | **0.061** | **0.219** | **0.027** |
+| **Whole decision** | **0.423** | **0.762** | **0.096** |
+| Encoder / PID share | 77 % / 14 % | 65 % / 29 % | ~69 % / ~21 % |
+
+- **Numerics:** segmented vs whole max |diff| 0; graph vs eager 0.
+- **Graph column:** the per-segment graphs sum to 0.129 ms against 0.096 ms whole, because each replay carries ~10 µs of fixed overhead. Use the whole number, and the segments for shares only.
+- **Whole-graph agreement:** 0.096 ms here vs 0.099 ms in §41.
+- **Eager disagreement:** GPU eager is 0.762 vs 0.842 ms. Eager clocks jitter run to run (here 3,000 burn / 300 reps; §41 6,000 / 100). The slide uses §41.
+
+**Findings**
+1. **Dropping the rollout is what makes era 1 fast.** The one-pass variant takes 0.184 ms against the cascade's 11.8 ms (64× in graph replay).
+2. **Era 2 is still 1.9× faster in graph replay** (0.099 vs 0.184 ms) and 1.6× faster eager. Its network has about 50× fewer parameters (0.14 M vs 6.9 M encoder).
+3. **The encoder dominates the era-2 decision** (60–77 %), then the PID update (14–29 %). The gain lookup is negligible.
+4. **At batch 1 the CPU beats GPU eager** (0.423 vs 0.762 ms), because GPU eager is launch-bound. The GPU graph remains the fastest path, 4.4× faster than the CPU. The CPU column is the whole decision on the CPU; it is not §40's discarded cpu_pid split.
+
+Files (`PSS_PINN/era2_sched_pid/bus_30/`):
+- Scripts: `latency_era1_oneshot_graph.py`, `latency_era2_stage_split.py`.
+- Results: `latency_era1_oneshot_graph_30.json` / `_9.json`, `latency_era2_stage_split_gpu.json` / `_cpu.json`.
+- Wiki record: pid-scheduling-datagen-progress §42; comparison row added to wiki decision-latency-profile.
